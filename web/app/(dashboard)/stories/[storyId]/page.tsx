@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Bot, Plus, Ticket } from "lucide-react";
+import { Bot, Pencil, Plus, Ticket } from "lucide-react";
+import { StoryFormModal } from "@/components/stories/StoryFormModal";
 import { toast } from "sonner";
 import { TicketCard } from "@/components/tickets/TicketCard";
 import { BackLink } from "@/components/ui/back-link";
@@ -23,7 +24,7 @@ import { agentApi, storiesApi, ticketsApi } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePagination } from "@/lib/hooks/usePagination";
 import { useProject } from "@/lib/hooks/useProjects";
-import { canCreateTicket, canEnableAgent } from "@/lib/permissions";
+import { canCreateStory, canCreateTicket, canEnableAgent } from "@/lib/permissions";
 import type { Story, Ticket as TicketType } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -42,6 +43,7 @@ export default function StoryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [startingAgent, setStartingAgent] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [storyModalOpen, setStoryModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -55,6 +57,8 @@ export default function StoryDetailPage() {
 
   const canCreate =
     user && project ? canCreateTicket(user.global_role, project.my_role) : false;
+  const canEditStory =
+    user && project ? canCreateStory(user.global_role, project.my_role) : false;
   const canStartAgent =
     user && project ? canEnableAgent(user.global_role, project.my_role) : false;
 
@@ -149,11 +153,19 @@ export default function StoryDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8">
       <BackLink href={`/projects/${projectId}`}>Back to project</BackLink>
 
       <header className="space-y-3">
-        <h2 className="text-2xl font-bold tracking-tight">{story.title}</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h2 className="text-2xl font-bold tracking-tight">{story.title}</h2>
+          {canEditStory && (
+            <Button size="sm" variant="outline" onClick={() => setStoryModalOpen(true)}>
+              <Pencil className="h-4 w-4" />
+              Edit story
+            </Button>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline" className="capitalize">
             {story.status}
@@ -161,6 +173,7 @@ export default function StoryDetailPage() {
           <Badge variant="secondary" className="capitalize">
             {story.priority}
           </Badge>
+          {story.auto_merge && <Badge variant="success">Auto merge</Badge>}
         </div>
         {story.description && (
           <p className="text-muted-foreground">{story.description}</p>
@@ -297,6 +310,14 @@ export default function StoryDetailPage() {
           </>
         )}
       </section>
+
+      <StoryFormModal
+        open={storyModalOpen}
+        onClose={() => setStoryModalOpen(false)}
+        projectId={projectId}
+        story={story}
+        onSuccess={setStory}
+      />
     </div>
   );
 }

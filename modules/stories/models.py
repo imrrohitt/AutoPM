@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,7 @@ class Story(Base, TimestampMixin):
     acceptance_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
     priority: Mapped[str] = mapped_column(String(32), nullable=False, default="medium")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    auto_merge: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )

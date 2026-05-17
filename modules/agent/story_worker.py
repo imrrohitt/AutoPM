@@ -249,18 +249,23 @@ class StoryAgentWorker:
                 )
 
             primary_ticket = tickets[0]
-            merged = await self._review_and_merge_loop(
-                git,
-                owner,
-                repo,
-                pr_number,
-                story,
-                llm_config,
-                api_key,
-                branch_name,
-                conversation,
-                primary_ticket,
-            )
+            if story.auto_merge:
+                merged = await self._auto_merge_if_quality_ok(
+                    git, owner, repo, pr_number, story, primary_ticket
+                )
+            else:
+                merged = await self._review_and_merge_loop(
+                    git,
+                    owner,
+                    repo,
+                    pr_number,
+                    story,
+                    llm_config,
+                    api_key,
+                    branch_name,
+                    conversation,
+                    primary_ticket,
+                )
 
             if merged:
                 story.status = "done"
@@ -355,6 +360,59 @@ class StoryAgentWorker:
             {"paths": [x["path"] for x in staged], "steps": len(agent_loop.store.events)},
         )
         return staged
+
+    async def _auto_merge_if_quality_ok(
+        self,
+        git: GitHubClient,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        story: Story,
+        ticket: Ticket,
+    ) -> bool:
+        """Story has auto_merge: skip LLM review; merge when automated quality gates pass."""
+        memory = await self.memory.load_all()
+        tree_paths = [
+            p.strip()
+            for p in (memory.get("codebase_tree") or "").splitlines()
+            if p.strip()
+        ]
+        await self.agent.add_log(
+            self.run_id,
+            "info",
+            "auto_merge",
+            "Auto-merge enabled — skipping human review; checking quality gates",
+        )
+        pr_files = await git.get_pr_files(owner, repo, pr_number)
+        patch_issues: list[str] = []
+        for pf in pr_files:
+            patch_issues.extend(
+                validate_patch(
+                    pf["filename"],
+                    pf.get("patch"),
+                    ticket,
+                    story,
+                    tree_paths=tree_paths,
+                )
+            )
+        if patch_issues:
+            await self.agent.add_log(
+                self.run_id,
+                "warning",
+                "auto_merge",
+                "Auto-merge skipped — quality gate failed:\n"
+                + "\n".join(f"- {i}" for i in patch_issues[:6])[:500],
+            )
+            return False
+        merged = await git.merge_pull_request(owner, repo, pr_number)
+        if merged:
+            await self.agent.add_log(
+                self.run_id,
+                "success",
+                "auto_merge",
+                f"PR #{pr_number} auto-merged (no human review required)",
+            )
+        return merged
 
     async def _review_and_merge_loop(
         self,

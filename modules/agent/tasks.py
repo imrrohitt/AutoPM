@@ -1,10 +1,24 @@
 import asyncio
+import logging
+import os
+import subprocess
+import sys
 import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 
 import core.models_registry  # noqa: F401 — register all SQLAlchemy mappers
 from core.database import celery_async_session
 from modules.agent.celery_app import celery_app
 from modules.agent.service import AgentService
+
+logger = logging.getLogger(__name__)
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _gevent_worker() -> bool:
+    return os.environ.get("AUTOPM_CELERY_GEVENT", "").lower() in ("1", "true", "yes")
 
 
 async def _run_agent_async(run_id: uuid.UUID) -> None:
@@ -17,11 +31,74 @@ async def _run_agent_async(run_id: uuid.UUID) -> None:
         result = await db.execute(select(AgentRun).where(AgentRun.id == run_id))
         run = result.scalar_one_or_none()
         if not run:
+            logger.warning("run_agent_async: run not found %s", run_id)
             return
+        logger.info("run_agent_async: executing run_id=%s type=%s", run_id, run.run_type)
         if run.run_type == "story":
             await StoryAgentWorker(db, run_id).execute()
         else:
             await AgentService(db).execute_run(run_id)
+
+
+async def _mark_run_failed(run_id: uuid.UUID, error: str) -> None:
+    from sqlalchemy import select
+
+    from modules.agent.models import AgentRun
+
+    async with celery_async_session() as db:
+        result = await db.execute(select(AgentRun).where(AgentRun.id == run_id))
+        run = result.scalar_one_or_none()
+        if not run or run.status in ("completed", "failed", "cancelled"):
+            return
+        run.status = "failed"
+        run.error_message = error[:2000]
+        run.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+
+
+def _run_in_subprocess(run_id: uuid.UUID, *extra_cli_args: str) -> None:
+    """
+    Spawn a clean Python process for asyncio + asyncpg.
+
+    Under gevent, use gevent.subprocess so wait() yields to the hub (stdlib
+    subprocess.run() blocks the worker and triggers LoopExit in Celery's pool).
+    """
+    cmd = [sys.executable, "-m", "modules.agent.run_cli", str(run_id), *extra_cli_args]
+    logger.info("spawning agent subprocess: %s", " ".join(cmd))
+    env = os.environ.copy()
+    cwd = str(_REPO_ROOT)
+
+    if _gevent_worker():
+        import gevent
+        import gevent.subprocess as gsubprocess
+
+        proc = gsubprocess.Popen(cmd, cwd=cwd, env=env)
+        # poll + sleep — proc.wait() can still upset gevent's thread resolver on macOS
+        while proc.poll() is None:
+            gevent.sleep(0.25)
+        returncode = proc.returncode if proc.returncode is not None else 0
+    else:
+        returncode = subprocess.run(cmd, cwd=cwd, env=env).returncode
+
+    logger.info("agent subprocess finished run_id=%s exit=%s", run_id, returncode)
+    if returncode != 0:
+        raise RuntimeError(f"Agent subprocess exited with code {returncode}")
+
+
+def _execute_run(run_id: uuid.UUID) -> None:
+    # Prefork agent worker: asyncio in-process (fast, no subprocess).
+    # Gevent worker (fallback): isolated CLI subprocess with cooperative polling.
+    if _gevent_worker():
+        _run_in_subprocess(run_id)
+    else:
+        asyncio.run(_run_agent_async(run_id))
+
+
+def _execute_mark_failed(run_id: uuid.UUID, error: str) -> None:
+    if _gevent_worker():
+        _run_in_subprocess(run_id, "--mark-failed", error[:500])
+    else:
+        asyncio.run(_mark_run_failed(run_id, error))
 
 
 @celery_app.task(
@@ -29,7 +106,25 @@ async def _run_agent_async(run_id: uuid.UUID) -> None:
     bind=True,
     max_retries=0,
     queue="agent",
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def run_agent_task(self, run_id: str) -> None:
-    """Runs in a gevent greenlet (shared process, async SQLAlchemy via asyncio)."""
-    asyncio.run(_run_agent_async(uuid.UUID(run_id)))
+    """Execute agent run (gevent: isolated subprocess; prefork: asyncio in worker)."""
+    parsed_id = uuid.UUID(run_id)
+    logger.info("run_agent_task starting run_id=%s pool_gevent=%s", run_id, _gevent_worker())
+    try:
+        _execute_run(parsed_id)
+        logger.info("run_agent_task finished run_id=%s", run_id)
+    except Exception as exc:
+        logger.exception("run_agent_task failed run_id=%s", run_id)
+        try:
+            _execute_mark_failed(parsed_id, str(exc))
+        except Exception:
+            logger.exception("could not mark run failed run_id=%s", run_id)
+        raise
+
+
+def dispatch_agent_run(run_id: uuid.UUID) -> None:
+    """Enqueue agent work on the agent queue (used by API and stale-run recovery)."""
+    run_agent_task.apply_async(args=[str(run_id)], queue="agent")

@@ -241,7 +241,7 @@ Add **`AGENTS.md`** to target repos so the agent follows your conventions.
 |---------|-------------|
 | `./scripts/dev-backend.sh` | FastAPI with hot reload (`:8000`) |
 | `./scripts/dev-frontend.sh` | Next.js dev server (`:3000`) |
-| `./scripts/dev-celery.sh` | Celery worker (gevent pool, `agent` + `default` queues) |
+| `./scripts/dev-celery.sh` | Celery: `agent` queue (prefork) + `default` queue (gevent greenlets) |
 | `alembic upgrade head` | Apply database migrations |
 
 ---
@@ -337,7 +337,7 @@ AutoPM/
 | Problem | Solution |
 |---------|----------|
 | GitHub / LLM save fails | Set valid `ENCRYPTION_KEY` in `.env` |
-| Agent stuck **queued** | Start Redis + `./scripts/dev-celery.sh` |
+| Agent stuck **queued** | Run `./scripts/dev-celery.sh` (only one worker). Kill strays: `pkill -9 -f modules.agent.celery_app`. Re-click **Start AI work** after 30s. |
 | Agent errors | Configure project LLM or `ANTHROPIC_API_KEY`; verify GitHub PAT scopes |
 | `401` responses | Re-login; check JWT / refresh token |
 | DB errors | Verify `DATABASE_URL` and `createdb autopm` |

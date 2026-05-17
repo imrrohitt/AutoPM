@@ -54,6 +54,7 @@ export interface Story {
   acceptance_criteria?: string | null;
   priority: string;
   status: string;
+  auto_merge?: boolean;
   created_by?: string | null;
   created_at?: string;
   updated_at?: string;

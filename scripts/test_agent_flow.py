@@ -15,6 +15,16 @@ PASSWORD = "changeme123"
 
 async def main() -> int:
     async with httpx.AsyncClient(timeout=120.0) as client:
+        print("0. Check API...")
+        try:
+            health = await client.get(f"{API.replace('/api/v1', '')}/docs")
+            if health.status_code >= 500:
+                print("API unavailable — start: ./scripts/dev-backend.sh")
+                return 1
+        except httpx.ConnectError:
+            print("API not running — start: ./scripts/dev-backend.sh")
+            return 1
+
         print("1. Login...")
         login = await client.post(f"{API}/auth/login", json={"email": EMAIL, "password": PASSWORD})
         if login.status_code != 200:

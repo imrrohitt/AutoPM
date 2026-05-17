@@ -27,6 +27,9 @@ def _slugify(text: str) -> str:
     return slug[:40] or "task"
 
 
+_STALE_QUEUED_SECONDS = 30
+
+
 class AgentService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -70,6 +73,21 @@ INSTRUCTIONS:
 8. Never break existing functionality — check related files before editing
 """
 
+    async def _redispatch_stale_queued(self, run: AgentRun) -> AgentRunResponse | None:
+        """Re-send Celery task for queued runs left behind after a worker restart."""
+        if run.status != "queued":
+            return None
+        created = run.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - created).total_seconds()
+        if age < _STALE_QUEUED_SECONDS:
+            return None
+        from modules.agent.tasks import dispatch_agent_run
+
+        dispatch_agent_run(run.id)
+        return AgentRunResponse.model_validate(run)
+
     async def queue_story_run(
         self, user: User, project_id: uuid.UUID, story_id: uuid.UUID
     ) -> AgentRunResponse:
@@ -85,7 +103,13 @@ INSTRUCTIONS:
                 AgentRun.status.in_(("queued", "running")),
             )
         )
-        if active.scalar_one_or_none():
+        existing = active.scalar_one_or_none()
+        if existing:
+            if existing.status == "running":
+                raise ConflictError("An agent run is already active for this story")
+            redispatched = await self._redispatch_stale_queued(existing)
+            if redispatched:
+                return redispatched
             raise ConflictError("An agent run is already active for this story")
 
         github_token = await GitHubService(self.db).get_decrypted_token(project_id)
@@ -108,9 +132,9 @@ INSTRUCTIONS:
         await self.db.commit()
         await self.db.refresh(run)
 
-        from modules.agent.tasks import run_agent_task
+        from modules.agent.tasks import dispatch_agent_run
 
-        run_agent_task.delay(str(run.id))
+        dispatch_agent_run(run.id)
         return AgentRunResponse.model_validate(run)
 
     async def list_runs_for_story(self, user: User, story_id: uuid.UUID) -> list[AgentRunResponse]:
@@ -133,7 +157,13 @@ INSTRUCTIONS:
                 AgentRun.status.in_(("queued", "running")),
             )
         )
-        if active.scalar_one_or_none():
+        existing = active.scalar_one_or_none()
+        if existing:
+            if existing.status == "running":
+                raise ConflictError("An agent run is already active for this ticket")
+            redispatched = await self._redispatch_stale_queued(existing)
+            if redispatched:
+                return redispatched
             raise ConflictError("An agent run is already active for this ticket")
 
         run = AgentRun(
@@ -146,9 +176,9 @@ INSTRUCTIONS:
         await self.db.commit()
         await self.db.refresh(run)
 
-        from modules.agent.tasks import run_agent_task
+        from modules.agent.tasks import dispatch_agent_run
 
-        run_agent_task.delay(str(run.id))
+        dispatch_agent_run(run.id)
         return AgentRunResponse.model_validate(run)
 
     async def list_runs_for_ticket(self, user: User, ticket_id: uuid.UUID) -> list[AgentRunResponse]:

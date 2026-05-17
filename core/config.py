@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     DATABASE_URL: str = "postgresql+asyncpg://autopm:password@localhost:5432/autopm"
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = "redis://localhost:6379/2"
     SECRET_KEY: str = "change-me-in-production-use-long-random-string"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
     CELERY_WORKER_CONCURRENCY: int = 10
+    CELERY_POOL: str = "gevent"
     CELERY_QUEUES: str = "agent,default"
 
     API_V1_PREFIX: str = "/api/v1"
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
 
     @property
     def celery_result_backend(self) -> str:
-        return self.CELERY_RESULT_BACKEND or f"{self.REDIS_URL.rstrip('/0')}/1"
+        return self.CELERY_RESULT_BACKEND or self.REDIS_URL
 
 
 @lru_cache

@@ -1,25 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { ProjectCreateForm } from "@/components/projects/ProjectCreateForm";
-import { useAuth } from "@/lib/hooks/useAuth";
-import { canCreateProject } from "@/lib/permissions";
+import { useRouter } from "next/navigation";
 
+/** Legacy route — redirects to projects list (create opens in modal). */
 export default function NewProjectPage() {
-  const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user && !canCreateProject(user.global_role)) {
-      router.replace("/projects");
-    }
-  }, [user, loading, router]);
+    router.replace("/projects");
+  }, [router]);
 
-  return (
-    <div>
-      <h2 className="mb-6 text-2xl font-bold">Create project</h2>
-      <ProjectCreateForm />
-    </div>
-  );
+  return null;
 }

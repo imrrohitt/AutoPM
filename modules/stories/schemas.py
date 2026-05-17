@@ -11,6 +11,7 @@ class StoryCreate(BaseModel):
     description: str | None = None
     acceptance_criteria: str | None = None
     priority: str = Field(default="medium", pattern="^(critical|high|medium|low)$")
+    auto_merge: bool = False
 
 
 class StoryUpdate(BaseModel):
@@ -19,6 +20,7 @@ class StoryUpdate(BaseModel):
     acceptance_criteria: str | None = None
     priority: str | None = Field(None, pattern="^(critical|high|medium|low)$")
     status: str | None = Field(None, pattern="^(open|in_progress|done)$")
+    auto_merge: bool | None = None
 
 
 class StoryResponse(BaseModel):
@@ -29,6 +31,7 @@ class StoryResponse(BaseModel):
     acceptance_criteria: str | None
     priority: str
     status: str
+    auto_merge: bool = False
     created_by: UUID | None
     created_at: datetime
     updated_at: datetime

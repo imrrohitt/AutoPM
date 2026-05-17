@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
+import { SidebarProvider } from "./sidebar-context";
 import { TopBar } from "./TopBar";
 import { LoadingPage } from "@/components/ui/loading-page";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -38,12 +39,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar projectId={projectId} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar title={title} user={user} onLogout={logout} />
-        <main className="flex-1 overflow-auto p-6 md:p-8">{children}</main>
+    <SidebarProvider>
+      <div className="flex min-h-screen bg-background">
+        <Sidebar projectId={projectId} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar title={title} user={user} onLogout={logout} />
+          <main className="flex-1 overflow-auto p-6 md:p-8">{children}</main>
+        </div>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }

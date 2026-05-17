@@ -61,6 +61,7 @@ class StoryService:
             description=payload.description,
             acceptance_criteria=payload.acceptance_criteria,
             priority=payload.priority,
+            auto_merge=payload.auto_merge,
             created_by=user.id,
         )
         self.db.add(story)
@@ -123,6 +124,8 @@ class StoryService:
             story.priority = payload.priority
         if payload.status is not None:
             story.status = payload.status
+        if payload.auto_merge is not None:
+            story.auto_merge = payload.auto_merge
 
         await self.db.commit()
         await self.db.refresh(story)
