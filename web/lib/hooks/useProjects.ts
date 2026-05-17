@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { projectsApi } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
@@ -17,7 +18,9 @@ export function useProjects() {
       const { data } = await projectsApi.list();
       setProjects(data);
     } catch (err) {
-      setError(getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -43,7 +46,9 @@ export function useProject(projectId: string) {
       const { data } = await projectsApi.get(projectId);
       setProject(data);
     } catch (err) {
-      setError(getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

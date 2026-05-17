@@ -137,6 +137,42 @@ class GitHubClient:
             ]
             return paths[:limit]
 
+    async def find_open_pull_request(
+        self,
+        owner: str,
+        repo: str,
+        head: str,
+        base: str,
+    ) -> tuple[int, str] | None:
+        """Return open PR number and URL for head→base, if one exists."""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(
+                f"{GITHUB_API}/repos/{owner}/{repo}/pulls",
+                headers=self._headers,
+                params={
+                    "head": f"{owner}:{head}",
+                    "base": base,
+                    "state": "open",
+                    "per_page": 10,
+                },
+            )
+            r.raise_for_status()
+            for pr in r.json():
+                if pr.get("head", {}).get("ref") == head and pr.get("base", {}).get("ref") == base:
+                    return pr["number"], pr["html_url"]
+        return None
+
+    async def branch_ahead_by(self, owner: str, repo: str, base: str, head: str) -> int:
+        """How many commits head is ahead of base (0 if identical or unreachable)."""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(
+                f"{GITHUB_API}/repos/{owner}/{repo}/compare/{base}...{head}",
+                headers=self._headers,
+            )
+            if r.status_code != 200:
+                return 0
+            return int(r.json().get("ahead_by") or 0)
+
     async def create_pull_request(
         self,
         owner: str,
@@ -145,16 +181,43 @@ class GitHubClient:
         body: str,
         head: str,
         base: str,
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, bool]:
+        """Create PR or return existing open PR. Returns (number, url, reused_existing)."""
+        existing = await self.find_open_pull_request(owner, repo, head, base)
+        if existing:
+            return existing[0], existing[1], True
+
+        ahead = await self.branch_ahead_by(owner, repo, base, head)
+        if ahead == 0:
+            raise ValueError(
+                f"Branch '{head}' has no commits ahead of '{base}' — "
+                "nothing to open a pull request for"
+            )
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.post(
                 f"{GITHUB_API}/repos/{owner}/{repo}/pulls",
                 headers=self._headers,
                 json={"title": title, "body": body, "head": head, "base": base},
             )
+            if r.status_code == 422:
+                # Usually: PR already exists for this branch (re-run on same story)
+                existing = await self.find_open_pull_request(owner, repo, head, base)
+                if existing:
+                    return existing[0], existing[1], True
+                try:
+                    detail = r.json()
+                    msg = detail.get("message", r.text)
+                    errors = detail.get("errors") or []
+                    if errors:
+                        msg = f"{msg} — {errors}"
+                except Exception:
+                    msg = r.text
+                raise ValueError(f"GitHub could not create pull request: {msg}") from None
+
             r.raise_for_status()
             data = r.json()
-            return data["number"], data["html_url"]
+            return data["number"], data["html_url"], False
 
     async def merge_pull_request(self, owner: str, repo: str, pr_number: int) -> bool:
         async with httpx.AsyncClient(timeout=30.0) as client:

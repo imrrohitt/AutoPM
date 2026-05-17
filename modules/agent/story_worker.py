@@ -207,7 +207,7 @@ class StoryAgentWorker:
 
             await self.agent.add_log(self.run_id, "info", "pr_create", "Opening pull request")
             pr_body = await self._build_pr_body(story, tickets, plan)
-            pr_number, pr_url = await git.create_pull_request(
+            pr_number, pr_url, pr_reused = await git.create_pull_request(
                 owner,
                 repo,
                 title=f"[AutoPM] {story.title}",
@@ -218,9 +218,22 @@ class StoryAgentWorker:
             run.pr_number = pr_number
             run.pr_url = pr_url
             await self.db.commit()
-            await self.agent.add_log(
-                self.run_id, "success", "pr_created", f"PR #{pr_number} opened", {"pr_url": pr_url}
-            )
+            if pr_reused:
+                await self.agent.add_log(
+                    self.run_id,
+                    "info",
+                    "pr_created",
+                    f"Reusing existing PR #{pr_number} (new commits on branch)",
+                    {"pr_url": pr_url},
+                )
+            else:
+                await self.agent.add_log(
+                    self.run_id,
+                    "success",
+                    "pr_created",
+                    f"PR #{pr_number} opened",
+                    {"pr_url": pr_url},
+                )
 
             primary_ticket = tickets[0]
             merged = await self._review_and_merge_loop(

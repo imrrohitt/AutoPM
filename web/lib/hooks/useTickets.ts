@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ticketsApi } from "@/lib/api";
 import type { Ticket } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
@@ -18,7 +19,9 @@ export function useTicket(ticketId: string) {
       const { data } = await ticketsApi.get(ticketId);
       setTicket(data);
     } catch (err) {
-      setError(getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -44,7 +47,9 @@ export function useStoryTickets(storyId: string) {
       const { data } = await ticketsApi.list(storyId);
       setTickets(data);
     } catch (err) {
-      setError(getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

@@ -37,7 +37,7 @@ function LoginForm() {
   };
 
   return (
-    <Card>
+    <Card className="shadow-lg">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Sign in to AutoPM</CardTitle>
         <CardDescription>AI-native project management</CardDescription>

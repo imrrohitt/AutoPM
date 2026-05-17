@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { projectsApi } from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -77,7 +78,7 @@ export function ProjectCreateForm() {
             />
           </div>
           <Button type="submit" disabled={loading}>
-            {loading ? "Creating…" : "Create project"}
+            {loading ? <Spinner /> : "Create project"}
           </Button>
         </form>
       </CardContent>

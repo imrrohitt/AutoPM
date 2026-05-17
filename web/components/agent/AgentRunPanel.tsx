@@ -34,7 +34,8 @@ export function AgentRunPanel({
   const isRunning = activeRun?.status === "running" || activeRun?.status === "queued";
   const { logs, done, status, error, connected, loadingHistory } = useAgentStream(
     activeRun?.id ?? null,
-    isRunning
+    isRunning,
+    onRunsRefresh
   );
   const scrollRef = useRef<HTMLDivElement>(null);
 

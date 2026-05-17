@@ -3,23 +3,31 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { BookOpen, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { BackLink } from "@/components/ui/back-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LoadingPage } from "@/components/ui/loading-page";
+import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import { storiesApi } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { usePagination } from "@/lib/hooks/usePagination";
 import { useProject } from "@/lib/hooks/useProjects";
 import { canCreateStory } from "@/lib/permissions";
 import type { Story } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
+
+const STORIES_PAGE_SIZE = 8;
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -36,6 +44,9 @@ export default function ProjectDetailPage() {
     acceptance_criteria: "",
     priority: "medium",
   });
+
+  const { paginatedItems, page, totalPages, totalItems, goToPage, resetPage } =
+    usePagination(stories, STORIES_PAGE_SIZE);
 
   const canCreate = user && project
     ? canCreateStory(user.global_role, project.my_role)
@@ -57,6 +68,10 @@ export default function ProjectDetailPage() {
     fetchStories();
   }, [fetchStories]);
 
+  useEffect(() => {
+    resetPage();
+  }, [stories.length, resetPage]);
+
   const handleCreateStory = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
@@ -73,62 +88,66 @@ export default function ProjectDetailPage() {
     }
   };
 
-  if (loading) {
+  if (loading) return <LoadingPage label="Loading project…" />;
+
+  if (error || !project) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-32 w-full" />
-      </div>
+      <EmptyState
+        title="Project not found"
+        description={error || "This project may have been removed or you lack access."}
+        action={
+          <Link href="/projects">
+            <Button variant="outline">Back to projects</Button>
+          </Link>
+        }
+      />
     );
   }
 
-  if (error || !project) {
-    return <p className="text-destructive">{error || "Project not found"}</p>;
-  }
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">{project.name}</h2>
-        <p className="mt-1 text-muted-foreground">{project.description}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Badge variant="success">{project.status}</Badge>
-          {project.my_role && (
-            <Badge variant="outline" className="capitalize">
-              {project.my_role}
-            </Badge>
-          )}
-        </div>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <BackLink href="/projects">All projects</BackLink>
+
+      <PageHeader
+        title={project.name}
+        description={project.description || undefined}
+        action={
+          canCreate ? (
+            <Button size="sm" onClick={() => setShowForm(!showForm)}>
+              <Plus className="h-4 w-4" />
+              New story
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="success">{project.status}</Badge>
+        {project.my_role && (
+          <Badge variant="outline" className="capitalize">
+            {project.my_role}
+          </Badge>
+        )}
       </div>
 
       {(project.goals || project.tech_stack) && (
         <Card>
-          <CardContent className="grid gap-4 pt-6 md:grid-cols-2">
+          <CardContent className="grid gap-6 pt-6 md:grid-cols-2">
             {project.goals && (
-              <div>
-                <p className="text-sm font-medium">Goals</p>
+              <section>
+                <p className="text-sm font-medium text-foreground">Goals</p>
                 <p className="mt-1 text-sm text-muted-foreground">{project.goals}</p>
-              </div>
+              </section>
             )}
             {project.tech_stack && (
-              <div>
-                <p className="text-sm font-medium">Tech stack</p>
+              <section>
+                <p className="text-sm font-medium text-foreground">Tech stack</p>
                 <p className="mt-1 text-sm text-muted-foreground">{project.tech_stack}</p>
-              </div>
+              </section>
             )}
           </CardContent>
         </Card>
       )}
-
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Stories</h3>
-        {canCreate && (
-          <Button size="sm" onClick={() => setShowForm(!showForm)}>
-            <Plus className="h-4 w-4" />
-            New story
-          </Button>
-        )}
-      </div>
 
       {showForm && canCreate && (
         <Card>
@@ -176,45 +195,69 @@ export default function ProjectDetailPage() {
                 </Select>
               </div>
               <Button type="submit" disabled={creating}>
-                {creating ? <Spinner /> : "Create"}
+                {creating ? <Spinner /> : "Create story"}
               </Button>
             </form>
           </CardContent>
         </Card>
       )}
 
-      {storiesLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-        </div>
-      ) : stories.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No stories yet.</p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {stories.map((story) => (
-            <Link
-              key={story.id}
-              href={`/stories/${story.id}?projectId=${projectId}`}
-            >
-              <Card className="transition-colors hover:border-primary/40">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{story.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="flex gap-2">
-                  <Badge variant="outline" className="capitalize">
-                    {story.status}
-                  </Badge>
-                  <Badge variant="secondary" className="capitalize">
-                    {story.priority}
-                  </Badge>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
+      <section className="space-y-4">
+        <h3 className="text-lg font-semibold">Stories</h3>
+
+        {storiesLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Skeleton className="h-28 rounded-xl" />
+            <Skeleton className="h-28 rounded-xl" />
+          </div>
+        ) : stories.length === 0 ? (
+          <EmptyState
+            icon={BookOpen}
+            title="No stories yet"
+            description="Add a story to define work for your team and AI agent."
+            action={
+              canCreate ? (
+                <Button size="sm" onClick={() => setShowForm(true)}>
+                  <Plus className="h-4 w-4" />
+                  Create story
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {paginatedItems.map((story) => (
+                <Link
+                  key={story.id}
+                  href={`/stories/${story.id}?projectId=${projectId}`}
+                >
+                  <Card className="h-full transition-all hover:border-primary/40 hover:shadow-md">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">{story.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex gap-2">
+                      <Badge variant="outline" className="capitalize">
+                        {story.status}
+                      </Badge>
+                      <Badge variant="secondary" className="capitalize">
+                        {story.priority}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={STORIES_PAGE_SIZE}
+              onPageChange={goToPage}
+            />
+          </>
+        )}
+      </section>
     </div>
   );
 }
-

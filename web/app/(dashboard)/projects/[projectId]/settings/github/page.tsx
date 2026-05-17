@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { BackLink } from "@/components/ui/back-link";
+import { LoadingPage } from "@/components/ui/loading-page";
 import { Spinner } from "@/components/ui/spinner";
 import { githubApi } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -129,25 +131,14 @@ export default function GitHubSettingsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    );
-  }
+  if (loading) return <LoadingPage label="Loading GitHub settings…" />;
 
   const isFullyConnected = connection?.is_connected ?? Boolean(connection?.repo_owner);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Link
-        href={`/projects/${projectId}`}
-        className="text-sm text-muted-foreground hover:text-primary"
-      >
-        ← Back to project
-      </Link>
-      <h2 className="text-2xl font-bold">GitHub integration</h2>
+      <BackLink href={`/projects/${projectId}`}>Back to project</BackLink>
+      <h2 className="text-2xl font-bold tracking-tight">GitHub integration</h2>
 
       {isFullyConnected && connection ? (
         <Card>

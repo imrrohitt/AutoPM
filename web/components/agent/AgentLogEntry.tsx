@@ -10,10 +10,10 @@ const levelIcon = {
 };
 
 const levelColor = {
-  info: "text-blue-400",
-  warning: "text-amber-400",
-  error: "text-red-400",
-  success: "text-emerald-400",
+  info: "text-blue-600",
+  warning: "text-amber-600",
+  error: "text-red-600",
+  success: "text-emerald-600",
 };
 
 export function AgentLogEntry({ log }: { log: AgentLog }) {

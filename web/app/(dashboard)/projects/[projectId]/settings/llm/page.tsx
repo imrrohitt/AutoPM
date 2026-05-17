@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { BackLink } from "@/components/ui/back-link";
+import { LoadingPage } from "@/components/ui/loading-page";
 import { Spinner } from "@/components/ui/spinner";
 import { llmApi } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -171,24 +173,13 @@ export default function LLMSettingsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    );
-  }
+  if (loading) return <LoadingPage label="Loading LLM settings…" />;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Link
-        href={`/projects/${projectId}`}
-        className="text-sm text-muted-foreground hover:text-primary"
-      >
-        ← Back to project
-      </Link>
+      <BackLink href={`/projects/${projectId}`}>Back to project</BackLink>
       <div>
-        <h2 className="text-2xl font-bold">LLM configuration</h2>
+        <h2 className="text-2xl font-bold tracking-tight">LLM configuration</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Per-project model settings. Ollama uses{" "}
           <code className="rounded bg-muted px-1">/api/generate</code>; LiteLLM uses OpenAI-compatible{" "}

@@ -10,6 +10,17 @@ interface StreamDone {
   status: string;
 }
 
+interface StreamRunUpdate {
+  type: "run";
+  status: string;
+  pr_url?: string | null;
+  pr_number?: number | null;
+  branch_name?: string | null;
+  error_message?: string | null;
+}
+
+type StreamEvent = AgentLog | StreamDone | StreamRunUpdate;
+
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
 function sortLogs(logs: AgentLog[]): AgentLog[] {
@@ -25,26 +36,37 @@ function mergeLogLists(prev: AgentLog[], incoming: AgentLog[]): AgentLog[] {
   return sortLogs(Array.from(byId.values()));
 }
 
+function isAgentLog(data: StreamEvent): data is AgentLog {
+  return "id" in data && "message" in data && !("type" in data);
+}
+
 export function useAgentStream(
   runId: string | null,
-  /** When true, poll + SSE for live updates while the run is active. */
-  liveStream = true
+  /** Connect SSE while the run is active (no polling). */
+  liveStream = true,
+  onComplete?: () => void
 ) {
   const [logs, setLogs] = useState<AgentLog[]>([]);
   const [done, setDone] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [runMeta, setRunMeta] = useState<Partial<AgentRun> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const doneRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   const reset = useCallback(() => {
     setLogs([]);
     setDone(false);
     setStatus(null);
+    setRunMeta(null);
     setError(null);
     setConnected(false);
     setLoadingHistory(false);
+    doneRef.current = false;
   }, []);
 
   const fetchLogs = useCallback(async (id: string) => {
@@ -56,13 +78,15 @@ export function useAgentStream(
     setLogs((prev) => mergeLogLists(prev, stored));
     const runStatus = runRes.data.status;
     setStatus(runStatus);
+    setRunMeta(runRes.data);
     if (TERMINAL.has(runStatus)) {
       setDone(true);
+      doneRef.current = true;
     }
     return runStatus;
   }, []);
 
-  // Load all persisted steps when run is selected
+  // One-time load when run is selected (history for completed runs)
   useEffect(() => {
     if (!runId) {
       reset();
@@ -73,6 +97,8 @@ export function useAgentStream(
     setLoadingHistory(true);
     setError(null);
     setLogs([]);
+    setDone(false);
+    setRunMeta(null);
 
     (async () => {
       try {
@@ -93,34 +119,7 @@ export function useAgentStream(
     };
   }, [runId, reset, fetchLogs]);
 
-  // Poll backend while run is live (ensures every committed step appears)
-  useEffect(() => {
-    if (!runId || !liveStream) return;
-
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const runStatus = await fetchLogs(runId);
-        if (TERMINAL.has(runStatus)) {
-          setDone(true);
-        }
-      } catch {
-        /* keep last good logs */
-      }
-    };
-
-    poll();
-    const interval = setInterval(() => {
-      if (!cancelled) poll();
-    }, 2000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [runId, liveStream, fetchLogs]);
-
-  // SSE tail for lower latency during active runs
+  // SSE-only live stream (no polling)
   useEffect(() => {
     if (!runId || !liveStream) {
       abortRef.current?.abort();
@@ -128,29 +127,41 @@ export function useAgentStream(
       return;
     }
 
-    const controller = new AbortController();
-    abortRef.current = controller;
+    let cancelled = false;
+    let retryMs = 1000;
 
-    async function stream() {
+    const connect = async () => {
       const token = getAccessToken();
-      if (!token) return;
+      if (!token || cancelled) return;
+
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       try {
-        const response = await fetch(agentApi.streamUrl(runId!), {
-          headers: { Authorization: `Bearer ${token}` },
+        const response = await fetch(agentApi.streamUrl(runId), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "text/event-stream",
+          },
           signal: controller.signal,
         });
 
-        if (!response.ok) return;
+        if (!response.ok) {
+          throw new Error(`Stream failed (${response.status})`);
+        }
 
         setConnected(true);
+        setError(null);
+        retryMs = 1000;
+
         const reader = response.body?.getReader();
-        if (!reader) return;
+        if (!reader) throw new Error("No response body");
 
         const decoder = new TextDecoder();
         let buffer = "";
 
-        while (true) {
+        while (!cancelled) {
           const { done: readerDone, value } = await reader.read();
           if (readerDone) break;
 
@@ -164,42 +175,64 @@ export function useAgentStream(
               const raw = line.slice(6).trim();
               if (!raw) continue;
               try {
-                const data = JSON.parse(raw) as AgentLog | StreamDone;
+                const data = JSON.parse(raw) as StreamEvent;
+
                 if ("type" in data && data.type === "done") {
+                  doneRef.current = true;
                   setDone(true);
                   setStatus(data.status);
-                  await fetchLogs(runId!);
+                  setConnected(false);
+                  await fetchLogs(runId);
+                  onCompleteRef.current?.();
                   return;
                 }
-                setLogs((prev) => mergeLogLists(prev, [data as AgentLog]));
+
+                if ("type" in data && data.type === "run") {
+                  setStatus(data.status);
+                  setRunMeta({
+                    status: data.status,
+                    pr_url: data.pr_url ?? undefined,
+                    pr_number: data.pr_number ?? undefined,
+                    branch_name: data.branch_name ?? undefined,
+                    error_message: data.error_message ?? undefined,
+                  });
+                  if (TERMINAL.has(data.status)) {
+                    doneRef.current = true;
+                    setDone(true);
+                  }
+                  continue;
+                }
+
+                if (isAgentLog(data)) {
+                  setLogs((prev) => mergeLogLists(prev, [data]));
+                }
               } catch {
-                /* skip */
+                /* skip malformed chunk */
               }
             }
           }
         }
       } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          /* polling still works */
+        if ((err as Error).name === "AbortError" || cancelled) return;
+        setConnected(false);
+        if (!doneRef.current) {
+          setError("Live stream disconnected — reconnecting…");
+          await new Promise((r) => setTimeout(r, retryMs));
+          retryMs = Math.min(retryMs * 2, 8000);
+          if (!cancelled && !doneRef.current) connect();
         }
       } finally {
-        setConnected(false);
-        if (runId) {
-          try {
-            await fetchLogs(runId);
-          } catch {
-            /* ignore */
-          }
-        }
+        if (!cancelled) setConnected(false);
       }
-    }
+    };
 
-    stream();
+    connect();
 
     return () => {
-      controller.abort();
+      cancelled = true;
+      abortRef.current?.abort();
     };
   }, [runId, liveStream, fetchLogs]);
 
-  return { logs, done, status, error, connected, loadingHistory };
+  return { logs, done, status, runMeta, error, connected, loadingHistory };
 }

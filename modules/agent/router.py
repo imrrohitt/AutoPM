@@ -94,6 +94,22 @@ async def stream_agent_logs(
     async def event_generator():
         last_created_at: datetime | None = None
         idle_ticks = 0
+
+        async with async_session_factory() as session:
+            run_result = await session.execute(select(AgentRun).where(AgentRun.id == run_id))
+            initial_run = run_result.scalar_one_or_none()
+        if initial_run and initial_run.status in ("completed", "failed", "cancelled"):
+            yield f"data: {json.dumps({
+                'type': 'run',
+                'status': initial_run.status,
+                'pr_url': initial_run.pr_url,
+                'pr_number': initial_run.pr_number,
+                'branch_name': initial_run.branch_name,
+                'error_message': initial_run.error_message,
+            })}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'status': initial_run.status})}\n\n"
+            return
+
         while True:
             batch: list = []
             async with async_session_factory() as session:
@@ -117,6 +133,14 @@ async def stream_agent_logs(
                 run = run_result.scalar_one_or_none()
 
             if run and run.status in ("completed", "failed", "cancelled"):
+                yield f"data: {json.dumps({
+                    'type': 'run',
+                    'status': run.status,
+                    'pr_url': run.pr_url,
+                    'pr_number': run.pr_number,
+                    'branch_name': run.branch_name,
+                    'error_message': run.error_message,
+                })}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'status': run.status})}\n\n"
                 break
 
@@ -126,4 +150,12 @@ async def stream_agent_logs(
                 break
             await asyncio.sleep(0.5)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

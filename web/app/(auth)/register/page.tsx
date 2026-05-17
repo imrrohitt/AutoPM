@@ -39,7 +39,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <Card>
+    <Card className="shadow-lg">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Create your workspace</CardTitle>
         <CardDescription>Start with your company and owner account</CardDescription>
