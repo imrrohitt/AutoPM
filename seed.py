@@ -1,7 +1,7 @@
 """
 Seed the database with one company and one owner (super user).
 
-Usage (from backend/):
+Usage (from repo root):
     python seed.py
 
 Optional env vars (or add to .env):

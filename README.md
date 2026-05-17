@@ -8,8 +8,8 @@ AI-native project management: multi-tenant RBAC, stories/tickets, GitHub integra
 
 | Layer | Stack |
 |-------|--------|
-| Frontend | Next.js 14, React, TailwindCSS, shadcn-style UI |
-| Backend | FastAPI, SQLAlchemy 2 async, Alembic |
+| Web | Next.js 14, React, TailwindCSS, shadcn-style UI |
+| API | FastAPI, SQLAlchemy 2 async, Alembic |
 | Database | PostgreSQL 15+ |
 | Queue | Celery + Redis |
 | AI | Anthropic Claude + GitHub MCP |
@@ -29,10 +29,9 @@ AI-native project management: multi-tenant RBAC, stories/tickets, GitHub integra
 createdb autopm
 ```
 
-### 2. Backend
+### 2. API server
 
 ```bash
-cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -47,7 +46,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ### Seed (default super user)
 
 ```bash
-cd backend && source .venv/bin/activate
+source .venv/bin/activate
 python seed.py
 ```
 
@@ -64,14 +63,16 @@ Override via `SEED_*` env vars in `.env` (see `.env.example`).
 ### 3. Celery worker (agent runs)
 
 ```bash
-cd backend && source .venv/bin/activate
+source .venv/bin/activate
 celery -A modules.agent.celery_app worker --loglevel=info
 ```
 
-### 4. Frontend
+Or use `./scripts/dev-celery.sh`.
+
+### 4. Web app
 
 ```bash
-cd frontend
+cd web
 npm install
 cp .env.local.example .env.local
 npm run dev
@@ -89,7 +90,7 @@ Open http://localhost:3000 — API at http://localhost:8000/docs
 
 ## Environment variables
 
-### `backend/.env`
+### `.env` (repo root)
 
 | Variable | Description |
 |----------|-------------|
@@ -100,7 +101,7 @@ Open http://localhost:3000 — API at http://localhost:8000/docs
 | `REDIS_URL` | Celery broker |
 | `GITHUB_MCP_SERVER_URL` | GitHub MCP endpoint for agent tools |
 
-### `frontend/.env.local`
+### `web/.env.local`
 
 ```
 NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -128,14 +129,15 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ```
 AutoPM/
-├── backend/          # FastAPI + Celery
-│   ├── core/         # config, db, auth, encryption
-│   ├── modules/      # auth, users, projects, github, llm, stories, tickets, agent
-│   └── migrations/
-└── frontend/         # Next.js App Router
-    ├── app/          # pages
+├── core/             # config, db, auth, encryption
+├── modules/          # auth, users, projects, github, llm, stories, tickets, agent
+├── migrations/       # Alembic
+├── main.py           # FastAPI entry
+├── scripts/          # dev helpers
+└── web/              # Next.js App Router
+    ├── app/
     ├── components/
-    └── lib/          # api, auth, hooks
+    └── lib/
 ```
 
 ## Troubleshooting

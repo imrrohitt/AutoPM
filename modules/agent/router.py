@@ -93,11 +93,13 @@ async def stream_agent_logs(
 
     async def event_generator():
         last_created_at: datetime | None = None
+        idle_ticks = 0
         while True:
+            batch: list = []
             async with async_session_factory() as session:
                 service = AgentService(session)
-                logs = await service.get_logs_after(run_id, last_created_at)
-                for log in logs:
+                batch = await service.get_logs_after(run_id, last_created_at)
+                for log in batch:
                     payload = {
                         "id": str(log.id),
                         "run_id": str(log.run_id),
@@ -109,12 +111,18 @@ async def stream_agent_logs(
                     }
                     yield f"data: {json.dumps(payload)}\n\n"
                     last_created_at = log.created_at
+                    idle_ticks = 0
 
                 run_result = await session.execute(select(AgentRun).where(AgentRun.id == run_id))
                 run = run_result.scalar_one_or_none()
 
             if run and run.status in ("completed", "failed", "cancelled"):
                 yield f"data: {json.dumps({'type': 'done', 'status': run.status})}\n\n"
+                break
+
+            if not batch:
+                idle_ticks += 1
+            if idle_ticks > 120:
                 break
             await asyncio.sleep(0.5)
 

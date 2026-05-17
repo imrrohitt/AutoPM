@@ -32,7 +32,7 @@ export function AgentRunPanel({
 }: AgentRunPanelProps) {
   const activeRun = runs.find((r) => r.id === activeRunId) || runs[0];
   const isRunning = activeRun?.status === "running" || activeRun?.status === "queued";
-  const { logs, done, status, error, connected } = useAgentStream(
+  const { logs, done, status, error, connected, loadingHistory } = useAgentStream(
     activeRun?.id ?? null,
     isRunning
   );
@@ -131,8 +131,14 @@ export function AgentRunPanel({
               ref={scrollRef}
               className="max-h-96 overflow-y-auto rounded-lg border border-border bg-background/50 p-3"
             >
-              {logs.length === 0 && !error && (
+              {loadingHistory && logs.length === 0 && (
+                <p className="text-xs text-muted-foreground">Loading run logs…</p>
+              )}
+              {!loadingHistory && logs.length === 0 && !error && isRunning && (
                 <p className="text-xs text-muted-foreground">Waiting for logs…</p>
+              )}
+              {!loadingHistory && logs.length === 0 && !error && !isRunning && (
+                <p className="text-xs text-muted-foreground">No logs for this run.</p>
               )}
               {error && <p className="text-xs text-red-400">{error}</p>}
               {logs.map((log) => (

@@ -167,7 +167,7 @@ class GitHubClient:
                 return True
             return False
 
-    async def get_pr_files_summary(self, owner: str, repo: str, pr_number: int) -> str:
+    async def get_pr_files(self, owner: str, repo: str, pr_number: int) -> list[dict]:
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.get(
                 f"{GITHUB_API}/repos/{owner}/{repo}/pulls/{pr_number}/files",
@@ -175,7 +175,22 @@ class GitHubClient:
                 params={"per_page": 100},
             )
             r.raise_for_status()
-            lines = []
-            for f in r.json():
-                lines.append(f"- {f['filename']} (+{f.get('additions', 0)}/-{f.get('deletions', 0)})")
-            return "\n".join(lines) or "No files changed"
+            return r.json()
+
+    async def get_pr_files_summary(self, owner: str, repo: str, pr_number: int) -> str:
+        files = await self.get_pr_files(owner, repo, pr_number)
+        lines = []
+        for f in files:
+            lines.append(f"- {f['filename']} (+{f.get('additions', 0)}/-{f.get('deletions', 0)})")
+        return "\n".join(lines) or "No files changed"
+
+    async def get_pr_files_detail(self, owner: str, repo: str, pr_number: int) -> str:
+        """Full patches for review (truncated per file)."""
+        files = await self.get_pr_files(owner, repo, pr_number)
+        parts: list[str] = []
+        for f in files:
+            parts.append(
+                f"### {f['filename']} (+{f.get('additions', 0)}/-{f.get('deletions', 0)})\n"
+                f"```diff\n{(f.get('patch') or '(binary or too large)')[:8000]}\n```"
+            )
+        return "\n\n".join(parts) or "No files changed"

@@ -33,7 +33,7 @@ export default function StoryAgentWorkspacePage() {
   const isRunning =
     activeRun?.status === "running" || activeRun?.status === "queued";
 
-  const { logs, done, status, error, connected } = useAgentStream(
+  const { logs, done, status, error, connected, loadingHistory } = useAgentStream(
     activeRun?.id ?? null,
     isRunning
   );
@@ -208,8 +208,19 @@ export default function StoryAgentWorkspacePage() {
               ref={scrollRef}
               className="max-h-[32rem] overflow-y-auto rounded-lg border border-border bg-background/60 p-4 font-mono text-sm"
             >
-              {logs.length === 0 && !error && (
+              {loadingHistory && logs.length === 0 && (
+                <p className="text-muted-foreground">Loading run logs…</p>
+              )}
+              {!loadingHistory && logs.length === 0 && !error && isRunning && (
                 <p className="text-muted-foreground">Waiting for agent logs…</p>
+              )}
+              {!loadingHistory && logs.length === 0 && !error && !isRunning && (
+                <p className="text-muted-foreground">No logs recorded for this run.</p>
+              )}
+              {!loadingHistory && logs.length > 0 && (
+                <p className="mb-2 text-[10px] text-muted-foreground">
+                  {logs.length} step{logs.length === 1 ? "" : "s"} recorded
+                </p>
               )}
               {error && <p className="text-red-400">{error}</p>}
               {logs.map((log) => (

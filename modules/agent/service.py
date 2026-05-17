@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 from datetime import datetime, timezone
@@ -299,14 +300,21 @@ INSTRUCTIONS:
         message: str,
         metadata: dict | None = None,
     ) -> AgentLog:
+        safe_meta = metadata
+        if metadata:
+            try:
+                json.dumps(metadata)
+            except (TypeError, ValueError):
+                safe_meta = {"raw": str(metadata)[:2000]}
         log = AgentLog(
             run_id=run_id,
             level=level,
-            step=step,
-            message=message,
-            log_metadata=metadata,
+            step=(step or "step")[:255],
+            message=message[:8000] if message else "",
+            log_metadata=safe_meta,
         )
         self.db.add(log)
+        await self.db.flush()
         await self.db.commit()
         await self.db.refresh(log)
         return log

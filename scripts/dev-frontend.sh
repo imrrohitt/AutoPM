@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-cd "$(dirname "$0")/../frontend"
+cd "$(dirname "$0")/../web"
 if [ ! -d node_modules ] || [ ! -x node_modules/.bin/next ]; then
   echo "Installing dependencies..."
   npm install
