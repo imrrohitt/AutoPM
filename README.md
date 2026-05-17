@@ -1,293 +1,253 @@
-<br />
+<div align="center">
 
-<p align="center">
-  <a href="https://github.com/imrrohitt/AutoPM">
-    <img
-      src="docs/assets/logo-banner-hero.png"
-      alt="AutoPM — AI-native project management"
-      width="1012"
-    />
-  </a>
-</p>
+<a href="https://github.com/imrrohitt/AutoPM">
+  <img src="docs/assets/logo-banner-hero.png" alt="AutoPM" width="920" />
+</a>
 
 <br />
 
-<p align="center">
-  <strong>Multi-tenant project management with autonomous coding agents that read your repo, implement work, and open pull requests.</strong>
-</p>
+### AI-native project management with autonomous coding agents
 
-<p align="center">
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#tech-stack">Tech Stack</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#api-overview">API</a> ·
-  <a href="#contributing">Contributing</a>
-</p>
+Plan work as **projects → stories → tickets**, connect **GitHub**, configure **LLMs**, and let agents **read your codebase, implement changes, and open pull requests** — with live logs and full RBAC.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+" />
-  <img src="https://img.shields.io/badge/Next.js-14-000000?style=flat-square&logo=next.js&logoColor=white" alt="Next.js 14" />
-  <img src="https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/PostgreSQL-15+-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/Redis-Celery-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis" />
-  <img src="https://img.shields.io/badge/License-Open%20Source-2da1a4?style=flat-square" alt="Open Source" />
-</p>
+<br />
 
----
+[![Python](https://img.shields.io/badge/Python-3.11+-154c79?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-2da1a4?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-2da1a4?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-154c79?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-Celery-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Open Source](https://img.shields.io/badge/Open%20Source-76d7c4?style=for-the-badge&logo=opensourceinitiative&logoColor=154c79)](https://github.com/imrrohitt/AutoPM)
 
-## Overview
+<br />
 
-**AutoPM** is an open-source, AI-native project management platform. Teams organize work as **projects → stories → tickets**, connect **GitHub** repositories, configure **LLM providers** per project, and run an **autonomous coding agent** that follows an [OpenHands](https://github.com/OpenHands/OpenHands)-inspired loop: event log, rolling context condenser, tool use (`read_file` → `write_file` → `finish`), and security checks before commit.
+[**Quick Start**](#quick-start) · [**Features**](#features) · [**Tech Stack**](#tech-stack) · [**Architecture**](#architecture) · [**API**](#api-reference) · [**Contributing**](#contributing)
 
-Built for **local development** (no Docker required): PostgreSQL and Redis on your machine, FastAPI backend, Next.js dashboard, Celery workers for agent jobs.
+<br />
 
-| | |
-|---|---|
-| **Web UI** | [http://localhost:3000](http://localhost:3000) |
-| **API docs** | [http://localhost:8000/docs](http://localhost:8000/docs) |
-| **Agent pattern** | Event log · condenser · GitHub PR workflow |
+| Dashboard | API | Agent |
+|:---:|:---:|:---:|
+| [`localhost:3000`](http://localhost:3000) | [`localhost:8000/docs`](http://localhost:8000/docs) | OpenHands-style loop + SSE |
+
+</div>
+
+<br />
 
 ---
 
-## Table of contents
+## About
 
-- [Features](#features)
-- [Tech stack](#tech-stack)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Quick start](#quick-start)
-- [Development scripts](#development-scripts)
-- [First-time flow](#first-time-flow)
-- [Environment variables](#environment-variables)
-- [API overview](#api-overview)
-- [RBAC](#rbac)
-- [Agent system](#agent-system)
-- [Project structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
+**AutoPM** is an open-source platform that unifies **project management** and **AI-powered implementation**. Teams get multi-tenant workspaces, role-based access, and a coding agent inspired by [OpenHands](https://github.com/OpenHands/OpenHands) — event log, rolling context condenser, secure tool loop, and GitHub PR workflow.
+
+> **Local-first.** No Docker required. Run PostgreSQL and Redis on your machine, start the API, Celery worker, and Next.js dashboard.
 
 ---
 
 ## Features
 
-| Capability | Description |
-|------------|-------------|
-| **Multi-tenant workspaces** | Company-scoped users, projects, and settings |
-| **RBAC** | Global roles (owner, admin, member) + per-project roles (manager, developer, viewer) |
-| **Stories & tickets** | Priorities, statuses, acceptance criteria, comments |
-| **GitHub integration** | PAT storage (encrypted), repo connect, codebase indexing |
-| **LLM configuration** | Per-project provider: Anthropic, Ollama, LiteLLM, OpenAI, Groq |
-| **Coding agent** | Queue runs via Celery; live log stream (SSE); branch + PR on success |
-| **Agent workspace** | Story-level agent UI with run history and live progress |
-| **Security** | Fernet encryption for tokens/keys; content validation before agent commits |
-| **Target repo skills** | `AGENTS.md` at repo root loaded automatically on every agent run |
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Plan & organize
+- Multi-tenant **companies** and **projects**
+- **Stories** with acceptance criteria & priorities
+- **Tickets** with types, status, and comments
+- **RBAC** — global + per-project roles
+
+</td>
+<td width="50%" valign="top">
+
+### Build with AI
+- **GitHub** — encrypted PAT, repo connect, codebase index
+- **LLM** — Anthropic, Ollama, LiteLLM, OpenAI, Groq (per project)
+- **Agent** — Celery jobs, **live SSE logs**, branch + PR
+- **`AGENTS.md`** — auto-loaded skills from target repos
+
+</td>
+</tr>
+</table>
+
+| | Capability | Details |
+|:---:|---|---|
+| 🔐 | **Security** | Fernet-encrypted tokens & API keys; content validation before commit |
+| 📡 | **Live workspace** | Story-level agent UI with run history and streaming progress |
+| 🧠 | **Smart context** | Path scoring, repo tree, condenser, prior-run memory |
+| 🛠️ | **Tool loop** | `read_file` → `write_file` → `finish` via GitHub API |
 
 ---
 
 ## Tech stack
 
-### Frontend (`web/`)
+<table>
+<tr>
+<td align="center" width="33%"><strong>Frontend</strong><br/><code>web/</code></td>
+<td align="center" width="33%"><strong>Backend</strong><br/><code>modules/</code></td>
+<td align="center" width="33%"><strong>Data & jobs</strong></td>
+</tr>
+<tr>
+<td valign="top">
 
-| Technology | Version / notes |
-|------------|-----------------|
-| [Next.js](https://nextjs.org/) | 14 (App Router) |
-| [React](https://react.dev/) | 18 |
-| [TypeScript](https://www.typescriptlang.org/) | 5.7 |
-| [Tailwind CSS](https://tailwindcss.com/) | 3.4 |
-| [Axios](https://axios-http.com/) | API client + JWT refresh |
-| [Sonner](https://sonner.emilkowal.ski/) | Toasts & feedback |
-| [Lucide React](https://lucide.dev/) | Icons |
+- [Next.js 14](https://nextjs.org/) App Router  
+- [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)  
+- [Tailwind CSS](https://tailwindcss.com/)  
+- [Axios](https://axios-http.com/) + JWT refresh  
+- [Sonner](https://sonner.emilkowal.ski/) toasts  
 
-### Backend (repo root)
+</td>
+<td valign="top">
 
-| Technology | Version / notes |
-|------------|-----------------|
-| [FastAPI](https://fastapi.tiangolo.com/) | Async REST API |
-| [SQLAlchemy](https://www.sqlalchemy.org/) | 2.x async ORM |
-| [Alembic](https://alembic.sqlalchemy.org/) | Migrations |
-| [PostgreSQL](https://www.postgresql.org/) | 15+ via `asyncpg` |
-| [Celery](https://docs.celeryq.dev/) | Agent job queue |
-| [Redis](https://redis.io/) | Broker + result backend |
-| [Pydantic](https://docs.pydantic.dev/) | Settings & schemas |
-| [python-jose](https://python-jose.readthedocs.io/) | JWT auth |
-| [cryptography](https://cryptography.io/) | Fernet encryption (GitHub PAT, LLM keys) |
-| [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-python) | Claude API |
-| [httpx](https://www.python-httpx.org/) | LLM HTTP clients |
+- [FastAPI](https://fastapi.tiangolo.com/) async API  
+- [SQLAlchemy 2](https://www.sqlalchemy.org/) + [Alembic](https://alembic.sqlalchemy.org/)  
+- [Pydantic](https://docs.pydantic.dev/) settings  
+- [python-jose](https://python-jose.readthedocs.io/) JWT  
+- [cryptography](https://cryptography.io/) Fernet  
 
-### AI & integrations
+</td>
+<td valign="top">
 
-| Component | Role |
-|-----------|------|
-| **Anthropic Claude** | Primary cloud LLM (per-project or global key) |
-| **Ollama** | Local models via `/api/generate` |
-| **LiteLLM / OpenAI-compatible** | Proxy to many models |
-| **OpenAI / Groq** | Optional cloud providers |
-| **GitHub API + MCP** | Repo access, indexing, PR creation |
-| **OpenHands-style agent** | `modules/agent/` — event log, condenser, tool loop |
+- [PostgreSQL 15+](https://www.postgresql.org/)  
+- [Redis](https://redis.io/) + [Celery](https://docs.celeryq.dev/)  
+- [Anthropic](https://www.anthropic.com/) / Ollama / LiteLLM  
+- GitHub API + MCP  
 
-### Infrastructure (local)
-
-| Service | Purpose |
-|---------|---------|
-| **PostgreSQL** | Primary datastore |
-| **Redis** | Celery broker (`/0`) and results (`/1`) |
+</td>
+</tr>
+</table>
 
 ---
 
 ## Architecture
 
 ```mermaid
-flowchart TB
-  subgraph Client
-    UI[Next.js Dashboard]
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e8f7f5', 'primaryTextColor': '#154c79', 'primaryBorderColor': '#2da1a4', 'lineColor': '#2da1a4', 'secondaryColor': '#f0faf9', 'tertiaryColor': '#fff'}}}%%
+flowchart LR
+  subgraph Client["Client"]
+    UI["Next.js Dashboard"]
   end
 
-  subgraph API
-    FastAPI[FastAPI :8000]
+  subgraph Server["Server"]
+    API["FastAPI :8000"]
+    W["Celery Worker"]
+    A["Agent Loop"]
   end
 
-  subgraph Data
-    PG[(PostgreSQL)]
-    RQ[Redis]
+  subgraph Store["Data"]
+    PG[("PostgreSQL")]
+    RD[("Redis")]
   end
 
-  subgraph Workers
-    Celery[Celery Worker]
-    Agent[Agent Loop]
+  subgraph External["External"]
+    GH["GitHub"]
+    LLM["LLM Providers"]
   end
 
-  subgraph External
-    GH[GitHub API / MCP]
-    LLM[LLM Providers]
-  end
-
-  UI -->|REST + JWT| FastAPI
-  UI -->|SSE logs| FastAPI
-  FastAPI --> PG
-  FastAPI --> RQ
-  RQ --> Celery
-  Celery --> Agent
-  Agent --> GH
-  Agent --> LLM
-  Agent --> PG
+  UI -->|"REST · JWT"| API
+  UI -->|"SSE logs"| API
+  API --> PG
+  API --> RD
+  RD --> W
+  W --> A
+  A --> GH
+  A --> LLM
+  A --> PG
 ```
 
-| Layer | Responsibility |
-|-------|----------------|
+| Layer | Role |
+|-------|------|
 | **Web** | Auth, projects, stories, tickets, settings, agent workspace |
-| **API** | REST, RBAC, encryption, GitHub/LLM config, agent orchestration |
-| **Worker** | Long-running agent runs, tool execution, PR workflow |
-| **Agent** | Context building, path scoring, file read/write, finish + security analyzer |
-
----
-
-## Prerequisites
-
-| Requirement | Version |
-|-------------|---------|
-| Python | 3.11+ |
-| Node.js | 18+ |
-| PostgreSQL | 15+ |
-| Redis | 6+ |
-
-**macOS (Homebrew) example:**
-
-```bash
-brew install postgresql@15 redis
-brew services start postgresql@15
-brew services start redis
-createdb autopm
-```
+| **API** | REST, RBAC, encryption, GitHub/LLM config, orchestration |
+| **Worker** | Long-running agent runs, tools, PR workflow |
+| **Agent** | Context, condenser, security analyzer, memory |
 
 ---
 
 ## Quick start
 
-### 1. Clone & configure
+### Prerequisites
+
+| Tool | Version |
+|------|---------|
+| Python | 3.11+ |
+| Node.js | 18+ |
+| PostgreSQL | 15+ |
+| Redis | 6+ |
 
 ```bash
-git clone https://github.com/YOUR_ORG/AutoPM.git
+# macOS example
+brew install postgresql@15 redis
+brew services start postgresql@15 && brew services start redis
+createdb autopm
+```
+
+### Install & run
+
+```bash
+# 1 — Clone
+git clone https://github.com/imrrohitt/AutoPM.git
 cd AutoPM
 cp .env.example .env
-# Set DATABASE_URL, SECRET_KEY, ENCRYPTION_KEY (see Environment variables)
-```
 
-Generate a Fernet encryption key:
-
-```bash
+# 2 — Generate encryption key (add to .env)
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
 
-### 2. Database & API
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
+# 3 — Backend
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
-python seed.py          # optional: default company + owner
-./scripts/dev-backend.sh
-```
+python seed.py                    # optional: admin@autopm.com / changeme123
+./scripts/dev-backend.sh          # → http://localhost:8000
 
-API runs at **http://localhost:8000** · OpenAPI at **http://localhost:8000/docs**
-
-### 3. Celery worker (required for agents)
-
-```bash
-source .venv/bin/activate
+# 4 — Celery (required for agents)
 ./scripts/dev-celery.sh
+
+# 5 — Frontend
+cd web && npm install && npm run dev   # → http://localhost:3000
 ```
 
-### 4. Web app
+<details>
+<summary><strong>Seed defaults</strong></summary>
 
-```bash
-cd web
-cp .env.local.example .env.local   # if present
-npm install
-npm run dev
-```
-
-Open **http://localhost:3000**
-
----
-
-## Development scripts
-
-| Script | Description |
-|--------|-------------|
-| `./scripts/dev-backend.sh` | FastAPI with hot reload (`:8000`) |
-| `./scripts/dev-frontend.sh` | Next.js dev server (`:3000`) |
-| `./scripts/dev-celery.sh` | Celery worker for agent jobs |
-| `python seed.py` | Seed company + owner user |
-| `alembic upgrade head` | Apply DB migrations |
-
-### Seed defaults
-
-| Field | Default |
-|-------|---------|
+| Field | Value |
+|-------|-------|
 | Company | AutoPM (`autopm`) |
 | Email | `admin@autopm.com` |
 | Password | `changeme123` |
 
-Override with `SEED_*` variables in `.env` (see `.env.example`).
+Override via `SEED_*` in `.env` — see [`.env.example`](.env.example).
+
+</details>
+
+### First-time flow
+
+```
+Register → Create project → Connect GitHub → Configure LLM → Stories & tickets → Run agent
+```
+
+1. Open **http://localhost:3000** and register (or use seed user).
+2. Create a **project** with goals and tech stack for the agent.
+3. **Settings → GitHub** — save PAT, connect repo, index codebase.
+4. **Settings → LLM** — pick provider, test connection.
+5. Add **stories** and **tickets** with acceptance criteria.
+6. **Start AI work** — watch live logs in the agent workspace.
+
+Add **`AGENTS.md`** to target repos so the agent follows your conventions.
 
 ---
 
-## First-time flow
+## Development
 
-1. **Register** at `/register` — creates company + owner account (or use seed user).
-2. **Create a project** — `/projects/new` with goals and tech stack for the agent.
-3. **Connect GitHub** — project settings → save PAT → list repos → connect repository → index codebase.
-4. **Configure LLM** — project settings → choose provider (Anthropic, Ollama, LiteLLM, etc.) → test connection.
-5. **Create stories & tickets** — define work with acceptance criteria.
-6. **Run the agent** — story page → **Start AI work** or ticket-level agent → watch **live logs** in the agent workspace.
-
-For target repositories (e.g. your app repo), add an **`AGENTS.md`** at the root with coding conventions; AutoPM loads it on every agent run.
+| Command | Description |
+|---------|-------------|
+| `./scripts/dev-backend.sh` | FastAPI with hot reload (`:8000`) |
+| `./scripts/dev-frontend.sh` | Next.js dev server (`:3000`) |
+| `./scripts/dev-celery.sh` | Celery worker for agent jobs |
+| `alembic upgrade head` | Apply database migrations |
 
 ---
 
-## Environment variables
+<details>
+<summary><strong>Environment variables</strong></summary>
 
 ### Root `.env`
 
@@ -295,11 +255,10 @@ For target repositories (e.g. your app repo), add an **`AGENTS.md`** at the root
 |----------|-------------|
 | `DATABASE_URL` | `postgresql+asyncpg://user@localhost:5432/autopm` |
 | `SECRET_KEY` | JWT signing secret |
-| `ENCRYPTION_KEY` | Fernet key for GitHub tokens & LLM API keys |
-| `REDIS_URL` / `CELERY_BROKER_URL` | Redis for Celery |
-| `ANTHROPIC_API_KEY` | Optional global fallback for the agent |
-| `GITHUB_MCP_SERVER_URL` | GitHub MCP endpoint for agent tools |
-| `SEED_*` | Optional seed script overrides |
+| `ENCRYPTION_KEY` | Fernet key for GitHub & LLM secrets |
+| `REDIS_URL` | Celery broker |
+| `ANTHROPIC_API_KEY` | Optional global agent fallback |
+| `GITHUB_MCP_SERVER_URL` | GitHub MCP endpoint |
 
 ### `web/.env.local`
 
@@ -307,119 +266,120 @@ For target repositories (e.g. your app repo), add an **`AGENTS.md`** at the root
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
----
+</details>
 
-## API overview
+<details>
+<summary><strong>API reference</strong></summary>
 
-| Area | Endpoints (summary) |
-|------|---------------------|
-| **Auth** | Register, login, refresh, logout, `/auth/me` |
-| **Company & users** | Company profile, invite users, role updates |
+| Area | Coverage |
+|------|----------|
+| **Auth** | Register, login, refresh, `/auth/me` |
 | **Projects** | CRUD, members, RBAC |
-| **GitHub** | Token, list repos, connect, disconnect, index |
-| **LLM** | List providers, save/test per-project config |
-| **Stories** | CRUD under `/projects/{id}/stories` |
-| **Tickets** | CRUD, comments, enable-agent |
-| **Agent** | Run story/ticket, list runs, logs, SSE stream, cancel |
+| **GitHub** | Token, repos, connect, index |
+| **LLM** | Providers, save, test |
+| **Stories / Tickets** | CRUD, comments, enable-agent |
+| **Agent** | Run, logs, SSE stream, cancel |
 
-Interactive docs: **http://localhost:8000/docs**
+Interactive docs → **http://localhost:8000/docs**
 
----
+</details>
 
-## RBAC
+<details>
+<summary><strong>RBAC</strong></summary>
 
-### Global roles
+**Global:** `owner` · `admin` · `member`
 
-| Role | Typical access |
-|------|----------------|
-| **owner** | Full company control |
-| **admin** | Manage users and projects |
-| **member** | Project access via membership |
-
-### Project roles
-
-| Role | Permissions |
-|------|-------------|
+| Project role | Access |
+|--------------|--------|
 | **manager** | Stories, settings, members |
 | **developer** | Tickets, run agent |
 | **viewer** | Read-only |
 
-Global **owner** / **admin** bypass project checks for create/agent actions.
+Owners and admins bypass project-level restrictions.
 
----
+</details>
 
-## Agent system
-
-The coding agent in `modules/agent/` implements:
+<details>
+<summary><strong>Agent system</strong></summary>
 
 | Concept | Implementation |
 |---------|----------------|
-| **Event log** | Append-only actions & observations each step |
-| **Agent context** | Repo skills + triggered knowledge from `AGENTS.md` |
-| **Rolling condenser** | Compresses history when context grows |
-| **Tool loop** | `read_file` → `write_file` → `finish` (GitHub API) |
-| **Security analyzer** | Blocks invalid or placeholder file content before commit |
-| **Memory** | Prior run summaries for continuity |
+| Event log | Append-only actions & observations |
+| Agent context | Repo skills + `AGENTS.md` |
+| Rolling condenser | Compresses long histories |
+| Tool loop | `read_file` → `write_file` → `finish` |
+| Security analyzer | Blocks invalid content before commit |
+| Memory | Prior run summaries |
 
-See [`AGENTS.md`](./AGENTS.md) (repo root) and [`modules/agent/AGENTS.md`](./modules/agent/AGENTS.md) for agent authoring rules.
+See [`AGENTS.md`](./AGENTS.md) and [`modules/agent/AGENTS.md`](./modules/agent/AGENTS.md).
 
----
+</details>
 
-## Project structure
+<details>
+<summary><strong>Project structure</strong></summary>
 
 ```
 AutoPM/
-├── core/                 # Config, database, auth, encryption
-├── modules/
-│   ├── auth/             # Registration, JWT
-│   ├── users/            # Company users
-│   ├── projects/         # Projects & members
-│   ├── github/           # GitHub connection & indexing
-│   ├── llm/              # Per-project LLM providers
-│   ├── stories/          # Stories
-│   ├── tickets/          # Tickets & comments
-│   └── agent/            # Celery tasks, loop, tools, SSE
-├── migrations/           # Alembic revisions
-├── scripts/              # dev-backend, dev-frontend, dev-celery
-├── docs/assets/          # README logo & assets
-├── main.py               # FastAPI entrypoint
-├── seed.py               # Database seed
-└── web/                  # Next.js App Router UI
-    ├── app/              # Routes (dashboard, auth, agent workspace)
-    ├── components/       # UI, layout, agent panels
-    ├── lib/              # API client, hooks, types
-    └── public/           # Static assets (favicon, logo)
+├── core/              # Config, DB, auth, encryption
+├── modules/           # auth, users, projects, github, llm, stories, tickets, agent
+├── migrations/        # Alembic
+├── scripts/           # dev-backend, dev-frontend, dev-celery
+├── docs/assets/       # Brand & README assets
+├── main.py            # FastAPI entry
+└── web/               # Next.js dashboard
 ```
 
----
+</details>
 
-## Troubleshooting
+<details>
+<summary><strong>Troubleshooting</strong></summary>
 
-| Issue | Fix |
-|-------|-----|
-| GitHub / LLM save fails | Set a valid `ENCRYPTION_KEY` in `.env` |
-| Agent stays **queued** | Start Redis and `./scripts/dev-celery.sh` |
-| Agent errors immediately | Configure project LLM or set `ANTHROPIC_API_KEY`; connect GitHub with a PAT that has repo access |
-| 401 on API | Check JWT / refresh token; re-login |
-| DB connection errors | Verify `DATABASE_URL` and that `autopm` database exists |
+| Problem | Solution |
+|---------|----------|
+| GitHub / LLM save fails | Set valid `ENCRYPTION_KEY` in `.env` |
+| Agent stuck **queued** | Start Redis + `./scripts/dev-celery.sh` |
+| Agent errors | Configure project LLM or `ANTHROPIC_API_KEY`; verify GitHub PAT scopes |
+| `401` responses | Re-login; check JWT / refresh token |
+| DB errors | Verify `DATABASE_URL` and `createdb autopm` |
+
+</details>
 
 ---
 
 ## Contributing
 
-Contributions are welcome. To get started:
+Contributions are welcome.
 
-1. Fork the repository and create a feature branch.
-2. Follow existing patterns in `modules/` and `web/`.
-3. Run migrations if you change models: `alembic revision --autogenerate -m "description"` then `alembic upgrade head`.
-4. Test API (`/docs`) and UI flows (projects → GitHub → LLM → agent).
-5. Open a pull request with a clear description and screenshots when UI changes.
+1. **Fork** the repo and create a feature branch.
+2. Follow patterns in `modules/` and `web/`.
+3. Run migrations if models change: `alembic revision --autogenerate -m "…"` then `alembic upgrade head`.
+4. Test flows: projects → GitHub → LLM → agent.
+5. Open a **pull request** with a clear description.
 
-For agent behavior changes, read **`modules/agent/AGENTS.md`** before submitting.
+For agent changes, read [`modules/agent/AGENTS.md`](./modules/agent/AGENTS.md) first.
 
 ---
 
-<p align="center">
-  <sub>Built with care for teams who want PM and implementation in one place.</sub><br />
-  <sub>Brand colors: Navy <code>#154c79</code> · Teal <code>#2da1a4</code> · Mint <code>#76d7c4</code></sub>
-</p>
+<div align="center">
+
+<br />
+
+**AutoPM** — project management and implementation in one place.
+
+<br />
+
+<img src="docs/assets/logo-banner-hero.png" alt="AutoPM" width="480" />
+
+<br />
+
+<sub>
+  <a href="https://github.com/imrrohitt/AutoPM">GitHub</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="http://localhost:8000/docs">API Docs</a>
+</sub>
+
+<br />
+
+<sub>Brand · Navy <code>#154c79</code> · Teal <code>#2da1a4</code> · Mint <code>#76d7c4</code></sub>
+
+</div>
