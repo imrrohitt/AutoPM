@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.env
+backend/.env
+frontend/.env.local
+.venv/
+venv/
+node_modules/
+frontend/node_modules/
+frontend/.next/
+.next/
+dist/
+frontend/.env.local
+*.egg-info/
+.pytest_cache/
+.coverage
