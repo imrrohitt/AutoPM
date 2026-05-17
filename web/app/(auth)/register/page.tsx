@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Spinner } from "@/components/ui/spinner";
 import { authApi } from "@/lib/api";
 import { setTokens } from "@/lib/auth";
+import { BRAND } from "@/lib/brand";
 import { getErrorMessage } from "@/lib/utils";
 
 export default function RegisterPage() {
@@ -42,7 +43,7 @@ export default function RegisterPage() {
     <Card className="shadow-lg">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Create your workspace</CardTitle>
-        <CardDescription>Start with your company and owner account</CardDescription>
+        <CardDescription>{BRAND.tagline}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -1,0 +1,17 @@
+{
+  "name": "AutoPM",
+  "short_name": "AutoPM",
+  "description": "AI-native project management",
+  "start_url": "/projects",
+  "display": "standalone",
+  "background_color": "#f7fcfb",
+  "theme_color": "#2da1a4",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "476x524",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

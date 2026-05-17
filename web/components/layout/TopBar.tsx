@@ -3,6 +3,7 @@
 import { LogOut, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { UserProfile } from "@/lib/types";
@@ -28,7 +29,10 @@ export function TopBar({ title, user, onLogout }: TopBarProps) {
 
   return (
     <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/80 px-6 backdrop-blur-sm">
-      <h1 className="text-lg font-semibold tracking-tight">{title || "Dashboard"}</h1>
+      <div className="flex items-center gap-3">
+        <Logo size={28} showText={false} href={null} className="md:hidden" />
+        <h1 className="text-lg font-semibold tracking-tight">{title || "Dashboard"}</h1>
+      </div>
       <div className="flex items-center gap-3">
         {user && (
           <div className="hidden items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm sm:flex">

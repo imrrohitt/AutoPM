@@ -9,8 +9,8 @@ import {
   LayoutDashboard,
   Settings,
   Users,
-  Wrench,
 } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
@@ -46,11 +46,8 @@ export function Sidebar({ projectId }: SidebarProps) {
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card">
-      <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Wrench className="h-4 w-4" />
-        </div>
-        <span className="font-semibold tracking-tight">AutoPM</span>
+      <div className="flex h-16 items-center border-b border-border px-4">
+        <Logo size={40} />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
