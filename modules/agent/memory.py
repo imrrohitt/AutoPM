@@ -71,6 +71,20 @@ class AgentMemoryStore:
         known.update(paths)
         await self.set("files_touched", "\n".join(sorted(known)))
 
+    async def remember_exploration(self, ticket_id: uuid.UUID, exploration: dict) -> None:
+        """OpenHands explore step: reasoning, paths, approach, risks."""
+        await self.remember_json(f"exploration_{ticket_id}", exploration)
+        reasoning = exploration.get("reasoning") or exploration.get("analysis") or ""
+        approach = exploration.get("approach") or ""
+        if reasoning:
+            await self.remember_decision(f"Explore ({ticket_id}): {reasoning[:400]}")
+        if approach:
+            await self.append("exploration_notes", f"[{ticket_id}] {approach[:500]}")
+
+    async def remember_thought(self, thought: str) -> None:
+        if thought.strip():
+            await self.append("thoughts", f"- {thought.strip()[:400]}")
+
 
 async def load_prior_story_learnings(
     db: AsyncSession,
@@ -115,6 +129,10 @@ async def load_prior_story_learnings(
             summary_parts.append(entries["decisions"][:400])
         if entries.get("files_touched"):
             summary_parts.append(f"Files: {entries['files_touched'][:300]}")
+        if entries.get("exploration_notes"):
+            summary_parts.append(f"Exploration: {entries['exploration_notes'][:300]}")
+        if entries.get("thoughts"):
+            summary_parts.append(f"Reasoning: {entries['thoughts'][:300]}")
         if summary_parts:
             lines.append(f"Run {run.completed_at}:\n" + "\n".join(summary_parts))
 

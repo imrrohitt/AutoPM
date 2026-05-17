@@ -7,7 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
-from modules.agent.context import fetch_agent_docs
+from modules.agent.context import (
+    explore_ticket_context,
+    fetch_agent_docs,
+    fetch_files,
+    format_files_for_prompt,
+)
+from modules.agent.project_intelligence import build_project_intelligence
 from modules.agent.loop import TicketAgentLoop
 from modules.agent.memory import AgentMemoryStore, load_prior_story_learnings
 from modules.agent.models import AgentRun
@@ -96,17 +102,31 @@ class StoryAgentWorker:
             agent_docs = await fetch_agent_docs(
                 git, owner, repo, branch_name, fallback_ref=base_branch
             )
+            agent_instructions = ""
             if agent_docs:
-                await self.memory.set(
-                    "agent_instructions",
-                    "\n\n".join(f"## {d.path}\n{d.content[:2000]}" for d in agent_docs),
+                agent_instructions = "\n\n".join(
+                    f"## {d.path}\n{d.content[:2000]}" for d in agent_docs
                 )
+                await self.memory.set("agent_instructions", agent_instructions)
                 await self.agent.add_log(
                     self.run_id,
                     "info",
                     "context",
                     f"Loaded project docs: {', '.join(d.path for d in agent_docs)}",
                 )
+
+            project_intelligence = build_project_intelligence(
+                project,
+                tree_paths,
+                agent_instructions=agent_instructions,
+            )
+            await self.memory.set("project_intelligence", project_intelligence)
+            await self.agent.add_log(
+                self.run_id,
+                "info",
+                "intelligence",
+                "Built OpenHands-style project intelligence brief",
+            )
 
             await self.agent.add_log(self.run_id, "info", "plan", "Creating execution plan")
             plan = await create_story_plan(
@@ -119,6 +139,7 @@ class StoryAgentWorker:
                 tickets=tickets,
                 codebase_summary=codebase_summary,
                 prior_learnings=prior_learnings,
+                project_intelligence=project_intelligence,
             )
             task_kind = infer_task_kind(tickets[0], story)
             constraints = list(plan.get("constraints") or [])
@@ -316,12 +337,59 @@ class StoryAgentWorker:
     ) -> list[dict]:
         memory_snapshot = await self.memory.load_all()
         prior_learnings = memory_snapshot.get("prior_learnings", "")
+        project_intelligence = memory_snapshot.get("project_intelligence", "")
+        prior_work = memory_snapshot.get("completed_tickets", "")
+
+        await self.agent.add_log(
+            self.run_id,
+            "info",
+            "explore",
+            f"Exploring codebase for: {ticket.title}",
+        )
+        exploration = await explore_ticket_context(
+            llm_config,
+            api_key,
+            project_name=project.name,
+            project_goals=project.goals,
+            tech_stack=project.tech_stack,
+            story=story,
+            ticket=ticket,
+            tree_paths=tree_paths,
+            prior_work=prior_work,
+            codebase_summary=codebase_summary,
+        )
+        await self.memory.remember_exploration(ticket.id, exploration)
+        reasoning = exploration.get("reasoning", "")
+        approach = exploration.get("approach", "")
+        await self.agent.add_log(
+            self.run_id,
+            "info",
+            "explore",
+            (reasoning or "Exploration complete")[:500],
+            {
+                "paths": exploration.get("relevant_paths", [])[:12],
+                "approach": approach[:300],
+            },
+        )
+
+        explore_paths = exploration.get("relevant_paths") or []
+        explored_files = await fetch_files(
+            git,
+            owner,
+            repo,
+            branch,
+            explore_paths[:8],
+            fallback_ref=base_branch,
+        )
+        exploration_block = format_files_for_prompt(explored_files)
+        if exploration_block != "No file contents loaded.":
+            await self.memory.set(f"explore_files_{ticket.id}", exploration_block[:14000])
 
         await self.agent.add_log(
             self.run_id,
             "info",
             "loop",
-            f"Starting OpenHands-style agent loop for: {ticket.title}",
+            f"Starting OpenHands agent loop for: {ticket.title}",
         )
 
         agent_loop = TicketAgentLoop(
@@ -348,6 +416,9 @@ class StoryAgentWorker:
             prior_learnings=prior_learnings,
             codebase_summary=codebase_summary,
             execution_plan=memory_snapshot.get("execution_plan", plan_to_memory_text(plan)),
+            project_intelligence=project_intelligence,
+            exploration=exploration,
+            exploration_block=exploration_block,
         )
 
         result = await self.db.execute(select(AgentRun).where(AgentRun.id == self.run_id))

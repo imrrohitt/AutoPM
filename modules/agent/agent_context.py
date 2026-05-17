@@ -68,6 +68,8 @@ def build_story_context(
     execution_plan: str = "",
     prior_learnings: str = "",
     codebase_summary: str = "",
+    project_intelligence: str = "",
+    exploration_block: str = "",
     task_kind: str = "code",
 ) -> AgentContext:
     repo_content = f"""PROJECT: {project.name}
@@ -87,8 +89,12 @@ TICKET: {ticket.title} ({ticket.type}, {ticket.priority})
         repo_content += f"\nPRIOR RUNS:\n{prior_learnings[:3000]}\n"
     if codebase_summary:
         repo_content += f"\nCODEBASE INDEX:\n{codebase_summary[:4000]}\n"
-    if agent_instructions:
+    if project_intelligence:
+        repo_content += f"\nPROJECT INTELLIGENCE:\n{project_intelligence[:5000]}\n"
+    elif agent_instructions:
         repo_content += f"\nREPO DOCS:\n{agent_instructions[:4000]}\n"
+    if exploration_block:
+        repo_content += f"\nEXPLORATION (read these before editing):\n{exploration_block[:12000]}\n"
 
     ctx = AgentContext(
         repo_skills=[RepoSkill(name="story_and_project", content=repo_content)],
@@ -130,6 +136,15 @@ TICKET: {ticket.title} ({ticket.type}, {ticket.priority})
                     "Before finish: verify acceptance criteria, ensure file paths exist "
                     "in the tree, match the task type (CSS→stylesheets only), "
                     "and write complete file bodies — never markdown inside code files."
+                ),
+            ),
+            KnowledgeSkill(
+                name="openhands_loop",
+                triggers=["think", "read", "write", "search", "finish"],
+                content=(
+                    "OpenHands loop: each step emit thought → action → read observation. "
+                    "Use think to plan; do not repeat list_tree/search after files are loaded. "
+                    "After write_file succeeds, call finish with verification vs acceptance criteria."
                 ),
             ),
         ],

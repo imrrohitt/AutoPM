@@ -31,6 +31,7 @@ async def create_story_plan(
     tickets: list[Ticket],
     codebase_summary: str,
     prior_learnings: str,
+    project_intelligence: str = "",
 ) -> dict:
     ticket_block = "\n".join(
         f"- [{t.type}] {t.title} (priority={t.priority}): {t.description[:300]}"
@@ -51,6 +52,9 @@ TICKETS:
 
 CODEBASE:
 {codebase_summary[:4000]}
+
+PROJECT INTELLIGENCE:
+{project_intelligence[:4000] if project_intelligence else 'See codebase summary.'}
 
 PRIOR RUNS ON THIS STORY:
 {prior_learnings or 'None — first run'}

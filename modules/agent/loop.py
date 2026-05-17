@@ -6,9 +6,11 @@ import json
 import uuid
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.agent.agent_context import AgentContext, build_story_context
+from modules.agent.models import AgentRun
 from modules.agent.condenser import rolling_condense
 from modules.agent.context import fetch_files, score_paths_by_keywords
 from modules.agent.events import AgentEvent, EventStore
@@ -102,6 +104,9 @@ class TicketAgentLoop:
         prior_learnings: str = "",
         codebase_summary: str = "",
         execution_plan: str = "",
+        project_intelligence: str = "",
+        exploration: dict | None = None,
+        exploration_block: str = "",
     ) -> list[dict]:
         from modules.agent.planner import plan_to_memory_text
 
@@ -115,6 +120,8 @@ class TicketAgentLoop:
             execution_plan=execution_plan or plan_to_memory_text(self._plan),
             prior_learnings=prior_learnings,
             codebase_summary=codebase_summary,
+            project_intelligence=project_intelligence,
+            exploration_block=exploration_block,
             task_kind=self._task_kind,
         )
 
@@ -139,6 +146,15 @@ class TicketAgentLoop:
             f"Complete ticket: {self._ticket.title}\n"
             f"{self._ticket.description}\n\n"
         )
+        if exploration:
+            paths = ", ".join((exploration.get("relevant_paths") or [])[:8])
+            task_msg += (
+                f"EXPLORATION PLAN:\n"
+                f"Reasoning: {exploration.get('reasoning', '')}\n"
+                f"Approach: {exploration.get('approach', '')}\n"
+                f"Target paths: {paths}\n"
+                f"Risks: {', '.join(exploration.get('risks') or [])}\n\n"
+            )
         if self.existing_by_path:
             task_msg += (
                 "Bootstrap: key files are already loaded in observations below. "
@@ -203,8 +219,21 @@ class TicketAgentLoop:
             )
             self.store.append(action_event)
             await persist_event(self.agent, self.run_id, action_event)
+            if step > 0 and step % 4 == 0:
+                run_row = await self.db.execute(
+                    select(AgentRun).where(AgentRun.id == self.run_id)
+                )
+                run_obj = run_row.scalar_one_or_none()
+                if run_obj:
+                    await self.memory.save_conversation(
+                        run_obj, self.store.to_messages()
+                    )
             self._track_action(action)
             self._last_thought = thought
+            if thought and action != "think":
+                await self.memory.remember_thought(thought)
+            if action == "think":
+                await self.memory.remember_decision(f"Think: {args.get('note', thought)[:300]}")
 
             if self._is_stuck():
                 await self._observation(
@@ -227,6 +256,13 @@ class TicketAgentLoop:
                     f"BLOCKED ({security.risk}): {security.reason}. Fix and retry.",
                     blocked=True,
                 )
+                retry = IMPLEMENT_RETRY_PROMPT.format(
+                    issues=f"- Security ({security.risk}): {security.reason}"
+                )
+                self.store.append(
+                    AgentEvent(event_type="message", source="user", content=retry)
+                )
+                await persist_event(self.agent, self.run_id, self.store.events[-1])
                 continue
 
             observation = await execute_tool(self.tool_state, action, args)
@@ -363,6 +399,14 @@ class TicketAgentLoop:
             self.existing_by_path,
         )
         if issues:
+            issue_text = "\n".join(f"- {i}" for i in issues[:8])
+            await self._observation("quality", f"Quality gate failed:\n{issue_text}")
+            retry = IMPLEMENT_RETRY_PROMPT.format(issues=issue_text)
+            self.store.append(
+                AgentEvent(event_type="message", source="user", content=retry)
+            )
+            await persist_event(self.agent, self.run_id, self.store.events[-1])
+            self.tool_state.staged_writes = []
             return None
         await self.memory.remember_json(
             f"loop_result_{self._ticket.id}",

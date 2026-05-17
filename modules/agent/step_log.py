@@ -65,6 +65,10 @@ def event_to_log_fields(event: AgentEvent) -> tuple[str, str, str, dict[str, Any
     if event.event_type == "message":
         if event.source == "user" and event.content.startswith("Hint:"):
             return "info", "hint", event.content[:2000], meta
+        if event.source == "user" and "quality checks" in event.content.lower():
+            return "warning", "retry", "Quality retry requested", meta
+        if event.source == "user" and event.content.startswith("EXPLORATION"):
+            return "info", "explore", event.content[:500] + ("…" if len(event.content) > 500 else ""), meta
         if event.source == "user":
             return "info", "task", event.content[:500] + ("…" if len(event.content) > 500 else ""), meta
         return "info", "thinking", event.content[:2000], meta

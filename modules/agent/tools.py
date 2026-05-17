@@ -15,7 +15,8 @@ from modules.agent.prompts import SMALL_MODEL_TOOL_PROMPT
 
 TOOL_INSTRUCTIONS = SMALL_MODEL_TOOL_PROMPT + """
 
-You work in a reasoning-action loop. Each step respond with ONLY valid JSON:
+You work in an OpenHands reasoning-action loop (thought → action → observation).
+Each step respond with ONLY valid JSON:
 
 {
   "thought": "brief reasoning for this step",
