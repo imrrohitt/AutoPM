@@ -17,6 +17,7 @@ from modules.agent.prompts import REVIEW_PROMPT
 from modules.agent.quality import validate_patch
 from modules.agent.task_scope import infer_task_kind, scope_hint_for_kind
 from modules.agent.service import AgentService, _slugify
+from modules.agent.workspace import RunWorkspaceService
 from modules.github.git_client import GitHubClient
 from modules.github.models import GitHubConnection
 from modules.github.service import GitHubService
@@ -175,21 +176,33 @@ class StoryAgentWorker:
                     plan,
                 )
 
+                workspace = RunWorkspaceService(self.db)
                 for fc in file_changes:
+                    path = fc["path"]
+                    before = await git.get_file_content(
+                        owner, repo, path, base_branch
+                    )
                     await git.upsert_file(
                         owner,
                         repo,
-                        fc["path"],
+                        path,
                         fc["content"],
                         branch_name,
                         fc.get("commit_message", f"autopm: {ticket.title}"),
                     )
+                    await workspace.record(
+                        self.run_id,
+                        path,
+                        before_content=before,
+                        after_content=fc["content"],
+                        change_type="committed",
+                    )
                     await self.agent.add_log(
                         self.run_id,
                         "success",
-                        "commit",
-                        f"Updated {fc['path']}",
-                        {"path": fc["path"]},
+                        "file_change",
+                        f"Committed {path}",
+                        {"path": path, "change_type": "committed"},
                     )
 
                 paths = [fc["path"] for fc in file_changes]

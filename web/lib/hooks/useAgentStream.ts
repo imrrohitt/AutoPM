@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
-import type { AgentLog, AgentRun } from "@/lib/types";
+import type { AgentFileChange, AgentLog, AgentRun } from "@/lib/types";
 
 interface StreamDone {
   type: "done";
@@ -19,7 +19,11 @@ interface StreamRunUpdate {
   error_message?: string | null;
 }
 
-type StreamEvent = AgentLog | StreamDone | StreamRunUpdate;
+interface StreamFileChange extends AgentFileChange {
+  type: "file_change";
+}
+
+type StreamEvent = AgentLog | StreamDone | StreamRunUpdate | StreamFileChange;
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
@@ -44,7 +48,8 @@ export function useAgentStream(
   runId: string | null,
   /** Connect SSE while the run is active (no polling). */
   liveStream = true,
-  onComplete?: () => void
+  onComplete?: () => void,
+  onFileChange?: (change: AgentFileChange) => void
 ) {
   const [logs, setLogs] = useState<AgentLog[]>([]);
   const [done, setDone] = useState(false);
@@ -56,7 +61,9 @@ export function useAgentStream(
   const abortRef = useRef<AbortController | null>(null);
   const doneRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
+  const onFileChangeRef = useRef(onFileChange);
   onCompleteRef.current = onComplete;
+  onFileChangeRef.current = onFileChange;
 
   const reset = useCallback(() => {
     setLogs([]);
@@ -185,6 +192,19 @@ export function useAgentStream(
                   await fetchLogs(runId);
                   onCompleteRef.current?.();
                   return;
+                }
+
+                if ("type" in data && data.type === "file_change") {
+                  const fc: AgentFileChange = {
+                    path: data.path,
+                    change_type: data.change_type,
+                    before_content: data.before_content,
+                    after_content: data.after_content,
+                    thought: data.thought,
+                    updated_at: data.updated_at,
+                  };
+                  onFileChangeRef.current?.(fc);
+                  continue;
                 }
 
                 if ("type" in data && data.type === "run") {

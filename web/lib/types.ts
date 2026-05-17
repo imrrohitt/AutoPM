@@ -156,6 +156,23 @@ export interface AgentLog {
   created_at: string;
 }
 
+export interface AgentFileChange {
+  path: string;
+  change_type: "read" | "staged" | "committed" | string;
+  before_content?: string | null;
+  after_content?: string | null;
+  thought?: string | null;
+  updated_at: string;
+}
+
+export interface AgentWorkspace {
+  repo_owner?: string | null;
+  repo_name?: string | null;
+  branch?: string | null;
+  tree: string[];
+  changes: AgentFileChange[];
+}
+
 export interface TokenResponse {
   access_token: string;
   refresh_token: string;

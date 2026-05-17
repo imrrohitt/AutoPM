@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Bot, ExternalLink, Square } from "lucide-react";
 import { toast } from "sonner";
-import { AgentLogEntry } from "@/components/agent/AgentLogEntry";
+import { AgentActivityFeed } from "@/components/agent/AgentActivityFeed";
+import { AgentCodePanel } from "@/components/agent/AgentCodePanel";
 import { AgentStatusBadge } from "@/components/agent/AgentStatusBadge";
 import { BackLink } from "@/components/ui/back-link";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { Spinner } from "@/components/ui/spinner";
 import { agentApi, storiesApi } from "@/lib/api";
 import { useAgentStream } from "@/lib/hooks/useAgentStream";
+import { useAgentWorkspace } from "@/lib/hooks/useAgentWorkspace";
 import { usePagination } from "@/lib/hooks/usePagination";
 import type { AgentRun, Story } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
@@ -42,19 +43,39 @@ export default function StoryAgentWorkspacePage() {
   const isRunning =
     activeRun?.status === "running" || activeRun?.status === "queued";
 
+  const {
+    workspace,
+    changes,
+    changeList,
+    activeChange,
+    selectedPath,
+    setSelectedPath,
+    treePaths,
+    loading: workspaceLoading,
+    mergeFileChange,
+    reload: reloadWorkspace,
+  } = useAgentWorkspace(activeRun?.id ?? null);
+
   const refreshRuns = useCallback(async () => {
     if (!projectId) return;
     try {
       const runsRes = await agentApi.listStoryRuns(storyId);
       setRuns(runsRes.data);
+      reloadWorkspace();
     } catch {
       /* keep last list */
     }
-  }, [projectId, storyId]);
+  }, [projectId, storyId, reloadWorkspace]);
 
   const { logs, done, status, runMeta, error, connected, loadingHistory } =
-    useAgentStream(activeRun?.id ?? null, isRunning, refreshRuns);
-  const scrollRef = useRef<HTMLDivElement>(null);
+    useAgentStream(
+      activeRun?.id ?? null,
+      isRunning,
+      refreshRuns,
+      mergeFileChange
+    );
+
+  const activityScrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     if (!projectId) {
@@ -84,8 +105,8 @@ export default function StoryAgentWorkspacePage() {
   }, [load]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (activityScrollRef.current) {
+      activityScrollRef.current.scrollTop = activityScrollRef.current.scrollHeight;
     }
   }, [logs]);
 
@@ -129,8 +150,8 @@ export default function StoryAgentWorkspacePage() {
   if (loading) return <LoadingPage label="Loading agent workspace…" />;
 
   return (
-    <article className="mx-auto max-w-4xl space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    <article className="flex h-[calc(100vh-5rem)] max-w-[100vw] flex-col gap-4">
+      <header className="flex shrink-0 flex-wrap items-start justify-between gap-4">
         <div>
           <BackLink href={`/stories/${storyId}?projectId=${projectId}`}>
             Back to story
@@ -149,29 +170,29 @@ export default function StoryAgentWorkspacePage() {
         )}
       </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Run history</CardTitle>
+      <Card className="shrink-0">
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm">Run history</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 pb-3 pt-0">
           {runs.length === 0 ? (
             <p className="text-sm text-muted-foreground">No runs yet.</p>
           ) : (
             <>
-              <ul className="grid gap-2 sm:grid-cols-2">
+              <ul className="flex flex-wrap gap-2">
                 {paginatedRuns.map((run) => (
                   <li key={run.id}>
                     <button
                       type="button"
                       onClick={() => selectRun(run)}
-                      className={`w-full rounded-lg border px-3 py-2.5 text-left text-xs transition-all ${
+                      className={`rounded-lg border px-3 py-2 text-left text-xs transition-all ${
                         activeRun?.id === run.id
                           ? "border-primary bg-primary/5 shadow-sm"
                           : "border-border hover:border-primary/30 hover:bg-accent"
                       }`}
                     >
                       <AgentStatusBadge status={run.status} />
-                      <p className="mt-1.5 font-mono text-muted-foreground">
+                      <p className="mt-1 font-mono text-muted-foreground">
                         {new Date(run.created_at).toLocaleString()}
                       </p>
                     </button>
@@ -191,84 +212,75 @@ export default function StoryAgentWorkspacePage() {
       </Card>
 
       {displayRun && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Live progress</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <AgentStatusBadge status={displayRun.status} />
-              {connected && (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Spinner className="h-3 w-3 text-primary" />
-                  Live
-                </span>
-              )}
-              {displayRun.branch_name && (
-                <Badge variant="outline" className="font-mono text-xs">
-                  {displayRun.branch_name}
-                </Badge>
-              )}
-              {displayRun.pr_url && (
-                <a
-                  href={displayRun.pr_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                >
-                  PR #{displayRun.pr_number}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </div>
-
-            {displayRun.error_message && (
-              <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                {displayRun.error_message}
-              </p>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-2">
+            <AgentStatusBadge status={displayRun.status} />
+            {connected && (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Spinner className="h-3 w-3 text-primary" />
+                Live
+              </span>
             )}
+            {displayRun.branch_name && (
+              <Badge variant="outline" className="font-mono text-xs">
+                {displayRun.branch_name}
+              </Badge>
+            )}
+            {displayRun.pr_url && (
+              <a
+                href={displayRun.pr_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              >
+                PR #{displayRun.pr_number}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+            {displayRun.error_message && (
+              <p className="w-full text-sm text-red-600">{displayRun.error_message}</p>
+            )}
+          </div>
 
+          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(280px,38%)_1fr]">
             <div
-              ref={scrollRef}
-              className="scrollbar-thin max-h-[32rem] overflow-y-auto rounded-lg border border-border bg-slate-50 p-4 font-mono text-sm"
+              ref={activityScrollRef}
+              className="min-h-[280px] border-b border-border lg:min-h-0 lg:border-b-0 lg:border-r"
             >
-              {loadingHistory && logs.length === 0 && (
-                <p className="flex items-center gap-2 text-muted-foreground">
-                  <Spinner className="h-4 w-4" />
-                  Loading run logs…
-                </p>
-              )}
-              {!loadingHistory && logs.length === 0 && !error && isRunning && (
-                <p className="text-muted-foreground">Waiting for agent logs…</p>
-              )}
-              {!loadingHistory && logs.length === 0 && !error && !isRunning && (
-                <p className="text-muted-foreground">No logs recorded for this run.</p>
-              )}
-              {!loadingHistory && logs.length > 0 && (
-                <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {logs.length} step{logs.length === 1 ? "" : "s"} recorded
-                </p>
-              )}
-              {error && <p className="text-red-600">{error}</p>}
-              {logs.map((log) => (
-                <AgentLogEntry key={log.id} log={log} />
-              ))}
+              <AgentActivityFeed
+                logs={logs}
+                loading={loadingHistory}
+                error={error}
+                isRunning={isRunning}
+              />
             </div>
-          </CardContent>
-        </Card>
+            <div className="min-h-[360px] lg:min-h-0">
+              <AgentCodePanel
+                repoOwner={workspace?.repo_owner}
+                repoName={workspace?.repo_name}
+                branch={workspace?.branch ?? displayRun.branch_name}
+                treePaths={treePaths}
+                changeList={changeList}
+                changes={changes}
+                selectedPath={selectedPath}
+                onSelectPath={setSelectedPath}
+                activeChange={activeChange}
+                loading={workspaceLoading}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {story?.acceptance_criteria && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Acceptance criteria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-              {story.acceptance_criteria}
-            </p>
-          </CardContent>
-        </Card>
+        <details className="shrink-0 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm">
+          <summary className="cursor-pointer font-medium text-muted-foreground">
+            Acceptance criteria
+          </summary>
+          <p className="mt-2 whitespace-pre-wrap text-muted-foreground">
+            {story.acceptance_criteria}
+          </p>
+        </details>
       )}
     </article>
   );

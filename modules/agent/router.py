@@ -12,8 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import async_session_factory
 from core.dependencies import get_current_user, get_db
 from modules.agent.models import AgentRun
-from modules.agent.schemas import AgentLogResponse, AgentRunDetailResponse, AgentRunResponse
+from modules.agent.schemas import (
+    AgentLogResponse,
+    AgentRunDetailResponse,
+    AgentRunResponse,
+    AgentWorkspaceResponse,
+)
 from modules.agent.service import AgentService
+from modules.agent.workspace import RunWorkspaceService
 from modules.users.models import User
 
 router = APIRouter(tags=["agent"])
@@ -83,6 +89,19 @@ async def get_agent_run_logs(
     return await AgentService(db).list_logs(current_user, run_id)
 
 
+@router.get("/agent/runs/{run_id}/workspace", response_model=AgentWorkspaceResponse)
+async def get_agent_run_workspace(
+    run_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    await AgentService(db).get_run(current_user, run_id)
+    result = await db.execute(select(AgentRun).where(AgentRun.id == run_id))
+    run = result.scalar_one()
+    data = await RunWorkspaceService(db).build_workspace(run)
+    return AgentWorkspaceResponse(**data)
+
+
 @router.get("/agent/runs/{run_id}/stream")
 async def stream_agent_logs(
     run_id: UUID,
@@ -93,11 +112,18 @@ async def stream_agent_logs(
 
     async def event_generator():
         last_created_at: datetime | None = None
+        last_file_at: datetime | None = None
         idle_ticks = 0
 
         async with async_session_factory() as session:
             run_result = await session.execute(select(AgentRun).where(AgentRun.id == run_id))
             initial_run = run_result.scalar_one_or_none()
+            ws = RunWorkspaceService(session)
+            if initial_run:
+                for fc in await ws.list_changes(run_id):
+                    yield f"data: {json.dumps(ws.change_to_sse_payload(fc))}\n\n"
+                    last_file_at = fc.updated_at
+
         if initial_run and initial_run.status in ("completed", "failed", "cancelled"):
             yield f"data: {json.dumps({
                 'type': 'run',
@@ -114,6 +140,7 @@ async def stream_agent_logs(
             batch: list = []
             async with async_session_factory() as session:
                 service = AgentService(session)
+                ws = RunWorkspaceService(session)
                 batch = await service.get_logs_after(run_id, last_created_at)
                 for log in batch:
                     payload = {
@@ -128,6 +155,10 @@ async def stream_agent_logs(
                     yield f"data: {json.dumps(payload)}\n\n"
                     last_created_at = log.created_at
                     idle_ticks = 0
+
+                for fc in await ws.get_changes_after(run_id, last_file_at):
+                    yield f"data: {json.dumps(ws.change_to_sse_payload(fc))}\n\n"
+                    last_file_at = fc.updated_at
 
                 run_result = await session.execute(select(AgentRun).where(AgentRun.id == run_id))
                 run = run_result.scalar_one_or_none()

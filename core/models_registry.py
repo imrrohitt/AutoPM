@@ -1,6 +1,6 @@
 """Import all ORM models so SQLAlchemy mappers configure (required for Celery workers)."""
 
-from modules.agent.models import AgentLog, AgentMemory, AgentRun  # noqa: F401
+from modules.agent.models import AgentLog, AgentMemory, AgentRun, AgentRunFileChange  # noqa: F401
 from modules.companies.models import Company  # noqa: F401
 from modules.github.models import GitHubConnection  # noqa: F401
 from modules.llm.models import LLMConfig  # noqa: F401

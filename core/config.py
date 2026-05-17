@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     GITHUB_MCP_SERVER_URL: str = "https://api.githubcopilot.com/mcp/"
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
+    CELERY_WORKER_CONCURRENCY: int = 10
+    CELERY_QUEUES: str = "agent,default"
 
     API_V1_PREFIX: str = "/api/v1"
 

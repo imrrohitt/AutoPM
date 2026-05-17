@@ -37,3 +37,20 @@ class AgentLogResponse(BaseModel):
 
 class AgentRunDetailResponse(AgentRunResponse):
     logs: list[AgentLogResponse] = []
+
+
+class AgentFileChangeResponse(BaseModel):
+    path: str
+    change_type: str
+    before_content: str | None = None
+    after_content: str | None = None
+    thought: str | None = None
+    updated_at: str
+
+
+class AgentWorkspaceResponse(BaseModel):
+    repo_owner: str | None = None
+    repo_name: str | None = None
+    branch: str | None = None
+    tree: list[str] = []
+    changes: list[AgentFileChangeResponse] = []

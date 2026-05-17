@@ -241,7 +241,7 @@ Add **`AGENTS.md`** to target repos so the agent follows your conventions.
 |---------|-------------|
 | `./scripts/dev-backend.sh` | FastAPI with hot reload (`:8000`) |
 | `./scripts/dev-frontend.sh` | Next.js dev server (`:3000`) |
-| `./scripts/dev-celery.sh` | Celery worker for agent jobs |
+| `./scripts/dev-celery.sh` | Celery worker (gevent pool, `agent` + `default` queues) |
 | `alembic upgrade head` | Apply database migrations |
 
 ---

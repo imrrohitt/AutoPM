@@ -241,6 +241,8 @@ export const agentApi = {
     api.get<AgentRun[]>(`/tickets/${ticketId}/agent/runs`),
   getRun: (runId: string) => api.get<AgentRun>(`/agent/runs/${runId}`),
   getLogs: (runId: string) => api.get<AgentLog[]>(`/agent/runs/${runId}/logs`),
+  getWorkspace: (runId: string) =>
+    api.get<import("@/lib/types").AgentWorkspace>(`/agent/runs/${runId}/workspace`),
   streamUrl: (runId: string) => `${API_BASE}/agent/runs/${runId}/stream`,
 };
 

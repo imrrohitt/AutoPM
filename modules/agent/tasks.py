@@ -24,6 +24,12 @@ async def _run_agent_async(run_id: uuid.UUID) -> None:
             await AgentService(db).execute_run(run_id)
 
 
-@celery_app.task(name="run_agent_task", bind=True, max_retries=0)
+@celery_app.task(
+    name="run_agent_task",
+    bind=True,
+    max_retries=0,
+    queue="agent",
+)
 def run_agent_task(self, run_id: str) -> None:
+    """Runs in a gevent greenlet (shared process, async SQLAlchemy via asyncio)."""
     asyncio.run(_run_agent_async(uuid.UUID(run_id)))

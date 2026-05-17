@@ -20,6 +20,7 @@ from modules.agent.task_scope import infer_task_kind, is_path_in_scope, scope_hi
 from modules.agent.security import analyze_action, validate_staged_writes
 from modules.agent.service import AgentService
 from modules.agent.step_log import persist_event
+from modules.agent.workspace import RunWorkspaceService
 from modules.agent.tools import TOOL_INSTRUCTIONS, ToolState, execute_tool
 from modules.github.git_client import GitHubClient
 from modules.llm.client import chat_completion
@@ -91,6 +92,8 @@ class TicketAgentLoop:
         self._ticket = ticket
         self._recent_actions: list[str] = []
         self._steps_since_condense = 0
+        self._last_thought = ""
+        self._workspace = RunWorkspaceService(db)
 
     async def run(
         self,
@@ -201,6 +204,7 @@ class TicketAgentLoop:
             self.store.append(action_event)
             await persist_event(self.agent, self.run_id, action_event)
             self._track_action(action)
+            self._last_thought = thought
 
             if self._is_stuck():
                 await self._observation(
@@ -231,7 +235,31 @@ class TicketAgentLoop:
                 path = args.get("path", "")
                 resolved = resolve_paths([path], self.tool_state.tree_paths)
                 if resolved:
-                    self.existing_by_path[resolved[0]] = observation
+                    path = resolved[0]
+                    self.existing_by_path[path] = observation
+                    await self._workspace.record(
+                        self.run_id,
+                        path,
+                        before_content=observation,
+                        change_type="read",
+                        thought=self._last_thought,
+                    )
+
+            if action == "write_file" and not observation.startswith("Error"):
+                path = args.get("path", "")
+                resolved = resolve_paths([path], self.tool_state.tree_paths)
+                if resolved:
+                    path = resolved[0]
+                    before = self.existing_by_path.get(path)
+                    content = args.get("content", "")
+                    await self._workspace.record(
+                        self.run_id,
+                        path,
+                        before_content=before,
+                        after_content=content,
+                        change_type="staged",
+                        thought=self._last_thought,
+                    )
 
             await self._observation(action, observation)
 
