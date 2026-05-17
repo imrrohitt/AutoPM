@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from modules.agent.path_utils import normalize_repo_path
 from modules.agent.quality import validate_change_set, validate_file_change
+from modules.agent.work_scope import WorkScope
 from modules.stories.models import Story
 from modules.tickets.models import Ticket
 
@@ -24,6 +26,7 @@ def analyze_action(
     story: Story,
     tree_paths: list[str],
     existing_by_path: dict[str, str | None],
+    work_scope: WorkScope | None = None,
 ) -> SecurityResult:
     """Evaluate proposed tool action before execution."""
     if action in ("read_file", "list_tree", "search_files", "think"):
@@ -33,7 +36,7 @@ def analyze_action(
         return SecurityResult(allowed=True, risk="low")
 
     if action == "write_file":
-        path = args.get("path", "")
+        path = normalize_repo_path(str(args.get("path", "")), tree_paths)
         content = args.get("content", "")
         if not path:
             return SecurityResult(allowed=False, risk="high", reason="write_file missing path")
@@ -44,6 +47,7 @@ def analyze_action(
             story,
             tree_paths,
             existing_content=existing_by_path.get(path),
+            work_scope=work_scope,
         )
         if issues:
             return SecurityResult(
@@ -62,5 +66,9 @@ def validate_staged_writes(
     story: Story,
     tree_paths: list[str],
     existing_by_path: dict[str, str | None],
+    *,
+    work_scope: WorkScope | None = None,
 ) -> list[str]:
-    return validate_change_set(staged, ticket, story, tree_paths, existing_by_path)
+    return validate_change_set(
+        staged, ticket, story, tree_paths, existing_by_path, work_scope=work_scope
+    )

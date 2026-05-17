@@ -20,7 +20,7 @@ Use `think` only when you need to plan without reading/writing. Do not loop `lis
 4. **Documentation** (`.md`): `#` title, overview, setup/usage, real project facts — ~15+ lines for README work.
 5. **Code files**: valid syntax, imports/exports, match conventions.
 6. **Never put markdown/README text inside `.js`, `.ts`, `.tsx`, `.jsx`.**
-7. **CSS/styling**: only `.css` / `.scss` (or clear style paths).
+7. **Story scope**: only edit files required by the story/ticket and project intelligence — not generic file-type rules.
 8. **Commits**: conventional message describing the actual change.
 
 ## Phases (OpenHands)
@@ -29,6 +29,17 @@ Use `think` only when you need to plan without reading/writing. Do not loop `lis
 2. **Implement** — read → write full file bodies
 3. **Verify** — `finish` with summary + how acceptance criteria are met
 
-## Output format
+## Output format (agent loop steps)
 
-JSON only when requested. `content` must be the **full final file**, ready to commit.
+Each step = **one JSON object only** (no markdown fences):
+
+```json
+{"thought":"brief plan","action":"read_file","args":{"path":"src/App.jsx"}}
+```
+
+**Allowed actions:** `read_file`, `write_file`, `list_tree`, `search_files`, `think`, `finish` — nothing else.
+
+- Paths: **repo-relative only** (`package.json`, `src/main.jsx`) — never `/Users/...` or `C:\...`
+- No invented tools (`rename`, `refactor`, etc.) — use `write_file` with full file content per file
+
+`content` in write_file must be the **full final file**, ready to commit.

@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     CELERY_POOL: str = "gevent"
     CELERY_QUEUES: str = "agent,default"
 
+    # Semantic memory (pgvector + fastembed)
+    SEMANTIC_MEMORY_ENABLED: bool = True
+    EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+    EMBEDDING_DIMENSION: int = 384
+
     API_V1_PREFIX: str = "/api/v1"
 
     @property

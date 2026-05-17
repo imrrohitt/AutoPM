@@ -16,7 +16,7 @@ Schema:
   "ticket_order": ["ticket titles in recommended execution order"],
   "architecture_notes": "how this fits the repo",
   "testing_strategy": "what to verify",
-  "constraints": ["things the agent must not do — include: never echo task text as file content; for CSS/styling stories only edit stylesheet files; never put README markdown in .js/.ts files"]
+  "constraints": ["things the agent must not do — include: never echo task text as file content; only edit files required by the story; never put README markdown in code files"]
 }"""
 
 

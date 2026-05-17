@@ -3,12 +3,9 @@
 import re
 from difflib import SequenceMatcher
 
-from modules.agent.task_scope import (
-    infer_task_kind,
-    is_path_in_scope,
-    looks_like_code_in_doc_file,
-    looks_like_markdown_in_code_file,
-)
+from modules.agent.path_utils import normalize_repo_path
+from modules.agent.task_scope import looks_like_code_in_doc_file, looks_like_markdown_in_code_file
+from modules.agent.work_scope import WorkScope
 from modules.stories.models import Story
 from modules.tickets.models import Ticket
 
@@ -25,7 +22,7 @@ def resolve_paths(requested: list[str], tree_paths: list[str]) -> list[str]:
     seen: set[str] = set()
 
     for raw in requested:
-        path = raw.strip().lstrip("/")
+        path = normalize_repo_path(raw, tree_paths)
         if not path:
             continue
         if path in tree_set and path not in seen:
@@ -131,17 +128,17 @@ def validate_file_change(
     tree_paths: list[str],
     *,
     existing_content: str | None = None,
-    task_kind: str | None = None,
+    work_scope: WorkScope | None = None,
 ) -> list[str]:
     """Return human-readable quality issues; empty list means OK."""
     issues: list[str] = []
+    path = normalize_repo_path(path, tree_paths)
     tree_set = set(tree_paths)
-    kind = task_kind or infer_task_kind(ticket, story)
 
-    if tree_paths and not is_path_in_scope(path, kind, tree_paths):
+    if work_scope and tree_paths and not work_scope.is_path_allowed(path, tree_paths):
         issues.append(
-            f"{path}: out of scope for a {kind} task — "
-            f"only change files that match the ticket (e.g. stylesheets for CSS work)"
+            f"{path}: out of scope for this story — "
+            f"only change files required by the story/ticket (see scope hint)"
         )
 
     if is_echo_content(content, ticket, story):
@@ -197,6 +194,7 @@ def validate_patch(
     story: Story,
     *,
     tree_paths: list[str] | None = None,
+    work_scope: WorkScope | None = None,
 ) -> list[str]:
     """Validate PR patch content before merge."""
     if not patch:
@@ -215,6 +213,7 @@ def validate_patch(
         ticket,
         story,
         tree_paths=tree_paths or [],
+        work_scope=work_scope,
     )
 
 
@@ -224,6 +223,8 @@ def validate_change_set(
     story: Story,
     tree_paths: list[str],
     existing_by_path: dict[str, str | None],
+    *,
+    work_scope: WorkScope | None = None,
 ) -> list[str]:
     all_issues: list[str] = []
     if not files:
@@ -244,6 +245,7 @@ def validate_change_set(
                 story,
                 tree_paths,
                 existing_content=existing_by_path.get(path),
+                work_scope=work_scope,
             )
         )
     return all_issues

@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 
 from modules.agent.context import fetch_files, score_paths_by_keywords
+from modules.agent.path_utils import normalize_repo_path
 from modules.agent.quality import resolve_paths
 from modules.github.git_client import GitHubClient
 from modules.stories.models import Story
@@ -36,7 +37,7 @@ Rules:
 - Always read_file before write_file on existing paths
 - Use exact paths from list_tree/search_files
 - write_file content must be complete final file, not a description of changes
-- Match file type to task: CSS tasks → .css/.scss only; never paste README markdown into .js files
+- Only change files required by the story scope; never paste README markdown into code files
 - Call finish when done; do not stop after only planning"""
 
 
@@ -74,7 +75,7 @@ async def execute_tool(state: ToolState, action: str, args: dict) -> str:
         return json.dumps({"paths": combined})
 
     if action == "read_file":
-        path = args.get("path", "")
+        path = normalize_repo_path(str(args.get("path", "")), state.tree_paths)
         if not path:
             return "Error: path required"
         resolved = resolve_paths([path], state.tree_paths)
@@ -93,7 +94,7 @@ async def execute_tool(state: ToolState, action: str, args: dict) -> str:
         return files[0].content[:14000]
 
     if action == "write_file":
-        path = args.get("path", "")
+        path = normalize_repo_path(str(args.get("path", "")), state.tree_paths)
         content = args.get("content", "")
         commit_message = args.get("commit_message", f"autopm: {state.ticket.title}")
         if not path or content is None:

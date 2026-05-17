@@ -16,12 +16,13 @@ from modules.agent.context import (
 from modules.agent.project_intelligence import build_project_intelligence
 from modules.agent.loop import TicketAgentLoop
 from modules.agent.memory import AgentMemoryStore, load_prior_story_learnings
+from modules.agent.semantic_memory import SemanticMemoryStore
+from modules.agent.work_scope import build_work_scope
 from modules.agent.models import AgentRun
 from modules.agent.parsing import extract_json
 from modules.agent.planner import create_story_plan, order_tickets_by_plan, plan_to_memory_text
 from modules.agent.prompts import REVIEW_PROMPT
 from modules.agent.quality import validate_patch
-from modules.agent.task_scope import infer_task_kind, scope_hint_for_kind
 from modules.agent.service import AgentService, _slugify
 from modules.agent.workspace import RunWorkspaceService
 from modules.github.git_client import GitHubClient
@@ -70,9 +71,32 @@ class StoryAgentWorker:
             owner, repo = conn.repo_owner, conn.repo_name
             base_branch = conn.default_branch
 
+            semantic = SemanticMemoryStore(self.db, run.project_id)
             prior_learnings = await load_prior_story_learnings(
                 self.db, run.story_id, exclude_run_id=self.run_id
             )
+            recall_query = "\n".join(
+                filter(
+                    None,
+                    [
+                        story.title,
+                        story.description or "",
+                        story.acceptance_criteria or "",
+                    ],
+                )
+            )
+            semantic_hits = await semantic.recall(
+                recall_query, limit=8, story_id=run.story_id
+            )
+            semantic_block = SemanticMemoryStore.format_hits(
+                semantic_hits, header="Project semantic memory (pgvector)"
+            )
+            if semantic_block:
+                prior_learnings = (
+                    f"{prior_learnings}\n\n{semantic_block}".strip()
+                    if prior_learnings
+                    else semantic_block
+                )
             if prior_learnings:
                 await self.memory.set("prior_learnings", prior_learnings)
                 await self.agent.add_log(
@@ -121,6 +145,11 @@ class StoryAgentWorker:
                 agent_instructions=agent_instructions,
             )
             await self.memory.set("project_intelligence", project_intelligence)
+            await semantic.remember_long_term(
+                project_intelligence[:8000],
+                "project_intelligence",
+                story_id=run.story_id,
+            )
             await self.agent.add_log(
                 self.run_id,
                 "info",
@@ -141,10 +170,18 @@ class StoryAgentWorker:
                 prior_learnings=prior_learnings,
                 project_intelligence=project_intelligence,
             )
-            task_kind = infer_task_kind(tickets[0], story)
+            work_scope = build_work_scope(
+                story, tickets[0], tree_paths, project_intelligence=project_intelligence
+            )
             constraints = list(plan.get("constraints") or [])
-            constraints.append(scope_hint_for_kind(task_kind))
+            constraints.append(work_scope.hint.split("\n")[0])
             plan["constraints"] = constraints
+            await semantic.remember_short_term(
+                plan_to_memory_text(plan)[:4000],
+                "execution_plan",
+                story_id=run.story_id,
+                run_id=self.run_id,
+            )
             await self.memory.set("execution_plan", plan_to_memory_text(plan))
             await self.agent.add_log(
                 self.run_id,
@@ -195,6 +232,7 @@ class StoryAgentWorker:
                     conversation,
                     codebase_summary,
                     plan,
+                    semantic,
                 )
 
                 workspace = RunWorkspaceService(self.db)
@@ -235,6 +273,12 @@ class StoryAgentWorker:
                 )
                 await self.memory.remember_decision(
                     f"Completed {ticket.title} with {len(file_changes)} file change(s)"
+                )
+                await semantic.remember_long_term(
+                    f"{story.title} — {ticket.title}: "
+                    f"{len(file_changes)} file(s) — {', '.join(paths[:12])}",
+                    "implementation",
+                    story_id=run.story_id,
                 )
                 ticket.status = "review"
                 await self.db.commit()
@@ -334,11 +378,15 @@ class StoryAgentWorker:
         conversation: list[dict[str, str]],
         codebase_summary: str,
         plan: dict,
+        semantic: SemanticMemoryStore,
     ) -> list[dict]:
         memory_snapshot = await self.memory.load_all()
         prior_learnings = memory_snapshot.get("prior_learnings", "")
         project_intelligence = memory_snapshot.get("project_intelligence", "")
         prior_work = memory_snapshot.get("completed_tickets", "")
+        work_scope = build_work_scope(
+            story, ticket, tree_paths, project_intelligence=project_intelligence
+        )
 
         await self.agent.add_log(
             self.run_id,
@@ -357,10 +405,18 @@ class StoryAgentWorker:
             tree_paths=tree_paths,
             prior_work=prior_work,
             codebase_summary=codebase_summary,
+            project_intelligence=project_intelligence,
+            work_scope=work_scope,
         )
         await self.memory.remember_exploration(ticket.id, exploration)
         reasoning = exploration.get("reasoning", "")
         approach = exploration.get("approach", "")
+        await semantic.remember_short_term(
+            f"Explore {ticket.title}: {reasoning}\nApproach: {approach}",
+            "exploration",
+            story_id=story.id,
+            run_id=self.run_id,
+        )
         await self.agent.add_log(
             self.run_id,
             "info",
@@ -455,6 +511,7 @@ class StoryAgentWorker:
             "Auto-merge enabled — skipping human review; checking quality gates",
         )
         pr_files = await git.get_pr_files(owner, repo, pr_number)
+        work_scope = build_work_scope(story, ticket, tree_paths)
         patch_issues: list[str] = []
         for pf in pr_files:
             patch_issues.extend(
@@ -464,6 +521,7 @@ class StoryAgentWorker:
                     ticket,
                     story,
                     tree_paths=tree_paths,
+                    work_scope=work_scope,
                 )
             )
         if patch_issues:
@@ -512,6 +570,7 @@ class StoryAgentWorker:
                 for p in (memory.get("codebase_tree") or "").splitlines()
                 if p.strip()
             ]
+            work_scope = build_work_scope(story, ticket, tree_paths)
             for pf in pr_files:
                 patch_issues.extend(
                     validate_patch(
@@ -520,6 +579,7 @@ class StoryAgentWorker:
                         ticket,
                         story,
                         tree_paths=tree_paths,
+                        work_scope=work_scope,
                     )
                 )
             if patch_issues and attempt == 0:

@@ -5,11 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from modules.agent.skills_loader import load_skills_from_md
 from modules.projects.models import Project
 from modules.stories.models import Story
 from modules.tickets.models import Ticket
 
 _AUTOPM_AGENTS = (Path(__file__).parent / "AGENTS.md").read_text(encoding="utf-8")
+_MD_SKILLS, _ALWAYS_SKILLS_MD = load_skills_from_md()
 
 
 @dataclass
@@ -70,7 +72,7 @@ def build_story_context(
     codebase_summary: str = "",
     project_intelligence: str = "",
     exploration_block: str = "",
-    task_kind: str = "code",
+    work_scope_hint: str = "",
 ) -> AgentContext:
     repo_content = f"""PROJECT: {project.name}
 GOALS: {project.goals or 'N/A'}
@@ -95,47 +97,30 @@ TICKET: {ticket.title} ({ticket.type}, {ticket.priority})
         repo_content += f"\nREPO DOCS:\n{agent_instructions[:4000]}\n"
     if exploration_block:
         repo_content += f"\nEXPLORATION (read these before editing):\n{exploration_block[:12000]}\n"
+    if work_scope_hint:
+        repo_content += f"\n{work_scope_hint}\n"
 
-    ctx = AgentContext(
-        repo_skills=[RepoSkill(name="story_and_project", content=repo_content)],
-        knowledge_skills=[
+    knowledge = [
+        KnowledgeSkill(name=s.name, triggers=s.triggers, content=s.content)
+        for s in _MD_SKILLS
+    ]
+    knowledge.extend(
+        [
             KnowledgeSkill(
-                name="css_and_styling_tasks",
-                triggers=[
-                    "css",
-                    "stylesheet",
-                    "styling",
-                    "homepage",
-                    "layout",
-                    "color",
-                    "theme",
-                    "tailwind",
-                    "visual",
-                    "style",
-                ],
+                name="story_scope",
+                triggers=["implement", "fix", "update", "create", "change", "add"],
                 content=(
-                    "CSS/styling task: ONLY edit .css/.scss files (or paths with style/globals/homepage). "
-                    "Never write README markdown into .js/.ts files. "
-                    "Read the existing stylesheet, then change selectors/properties in place. "
-                    "Do not replace unrelated source files."
-                ),
-            ),
-            KnowledgeSkill(
-                name="documentation_tasks",
-                triggers=["readme", "documentation", "docs", ".md"],
-                content=(
-                    "For documentation: read the existing file first, preserve accurate "
-                    "technical facts, add # title and ## sections, minimum 15 lines of "
-                    "real content. Never paste the ticket text as the file body."
+                    "Follow the STORY scope and acceptance criteria. "
+                    "Only edit files required to satisfy the story — paths and keywords "
+                    "from the story/ticket take precedence over generic rules."
                 ),
             ),
             KnowledgeSkill(
                 name="quality_gate",
-                triggers=["implement", "fix", "update", "create"],
+                triggers=["implement", "fix", "update", "create", "write"],
                 content=(
                     "Before finish: verify acceptance criteria, ensure file paths exist "
-                    "in the tree, match the task type (CSS→stylesheets only), "
-                    "and write complete file bodies — never markdown inside code files."
+                    "in the tree, write complete file bodies — never markdown inside code files."
                 ),
             ),
             KnowledgeSkill(
@@ -147,13 +132,11 @@ TICKET: {ticket.title} ({ticket.type}, {ticket.priority})
                     "After write_file succeeds, call finish with verification vs acceptance criteria."
                 ),
             ),
-        ],
+        ]
     )
-    if task_kind == "css":
-        ctx.system_suffix = (
-            "TASK TYPE: CSS/styling. Allowed writes: stylesheets only. "
-            "Forbidden: .js, .ts, .tsx, .jsx, .md unless ticket explicitly says otherwise."
-        )
-    elif task_kind == "docs":
-        ctx.system_suffix = "TASK TYPE: documentation. Allowed writes: .md and doc files only."
-    return ctx
+
+    return AgentContext(
+        repo_skills=[RepoSkill(name="story_and_project", content=repo_content)],
+        knowledge_skills=knowledge,
+        system_suffix=_ALWAYS_SKILLS_MD,
+    )

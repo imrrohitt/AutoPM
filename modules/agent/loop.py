@@ -15,10 +15,11 @@ from modules.agent.condenser import rolling_condense
 from modules.agent.context import fetch_files, score_paths_by_keywords
 from modules.agent.events import AgentEvent, EventStore
 from modules.agent.memory import AgentMemoryStore
-from modules.agent.parsing import extract_json
+from modules.agent.parsing import extract_json, parse_agent_step
+from modules.agent.path_utils import normalize_repo_path
 from modules.agent.prompts import IMPLEMENT_RETRY_PROMPT
 from modules.agent.quality import resolve_paths
-from modules.agent.task_scope import infer_task_kind, is_path_in_scope, scope_hint_for_kind
+from modules.agent.work_scope import WorkScope, build_work_scope
 from modules.agent.security import analyze_action, validate_staged_writes
 from modules.agent.service import AgentService
 from modules.agent.step_log import persist_event
@@ -30,14 +31,13 @@ from modules.projects.models import Project
 from modules.stories.models import Story
 from modules.tickets.models import Ticket
 
-ACTION_ALIASES = {
-    "read": "read_file",
-    "write": "write_file",
-    "list": "list_tree",
-    "search": "search_files",
-    "complete": "finish",
-    "done": "finish",
-}
+PARSE_RETRY_PROMPT = """Your last message was not valid step JSON.
+
+Reply with ONLY this shape (no markdown fences):
+{"thought":"...","action":"read_file","args":{"path":"exact/repo/path"}}
+
+Allowed actions: read_file, write_file, list_tree, search_files, think, finish
+Never use rename/refactor as action names. For renames: list_tree then write_file per file."""
 
 
 class TicketAgentLoop:
@@ -96,6 +96,8 @@ class TicketAgentLoop:
         self._steps_since_condense = 0
         self._last_thought = ""
         self._workspace = RunWorkspaceService(db)
+        self._work_scope: WorkScope | None = None
+        self._parse_failures = 0
 
     async def run(
         self,
@@ -110,7 +112,12 @@ class TicketAgentLoop:
     ) -> list[dict]:
         from modules.agent.planner import plan_to_memory_text
 
-        self._task_kind = infer_task_kind(self._ticket, self._story)
+        self._work_scope = build_work_scope(
+            self._story,
+            self._ticket,
+            self.tool_state.tree_paths,
+            project_intelligence=project_intelligence,
+        )
 
         self._ctx = build_story_context(
             self._project,
@@ -122,7 +129,7 @@ class TicketAgentLoop:
             codebase_summary=codebase_summary,
             project_intelligence=project_intelligence,
             exploration_block=exploration_block,
-            task_kind=self._task_kind,
+            work_scope_hint=self._work_scope.hint,
         )
 
         small_model_note = (
@@ -130,10 +137,7 @@ class TicketAgentLoop:
             "1) search_files or list_tree 2) read_file 3) write_file with FULL content "
             "4) finish. After a successful write_file you may call finish immediately."
         )
-        scope_note = f"\n\n{scope_hint_for_kind(self._task_kind)}"
-        system_prompt = (
-            self._ctx.build_system_prompt(TOOL_INSTRUCTIONS) + scope_note + small_model_note
-        )
+        system_prompt = self._ctx.build_system_prompt(TOOL_INSTRUCTIONS) + small_model_note
         system_event = AgentEvent(
             event_type="system", source="agent", content=system_prompt
         )
@@ -203,13 +207,26 @@ class TicketAgentLoop:
                 json_mode=True,
             )
 
-            action, args, thought = self._parse_step(raw)
+            action, args, thought, parse_err = parse_agent_step(raw)
             if not action:
-                await self._observation(
-                    "error",
-                    "Invalid step JSON. Use: {\"thought\":\"...\",\"action\":\"read_file\",\"args\":{\"path\":\"...\"}}",
+                self._parse_failures += 1
+                err_msg = parse_err or (
+                    'Invalid step JSON. Use: {"thought":"...","action":"read_file",'
+                    '"args":{"path":"repo/relative/path"}}'
                 )
+                await self._observation("error", err_msg)
+                self.store.append(
+                    AgentEvent(event_type="message", source="user", content=PARSE_RETRY_PROMPT)
+                )
+                await persist_event(self.agent, self.run_id, self.store.events[-1])
+                if self._parse_failures >= 4 and not self.tool_state.files_read:
+                    await self._observation(
+                        "hint",
+                        "Auto-hint: start with list_tree {\"prefix\":\"\"} then read_file.",
+                    )
                 continue
+            self._parse_failures = 0
+            args = self._normalize_step_args(action, args)
 
             action_event = AgentEvent(
                 event_type="action",
@@ -249,6 +266,7 @@ class TicketAgentLoop:
                 story=self._story,
                 tree_paths=self.tool_state.tree_paths,
                 existing_by_path=self.existing_by_path,
+                work_scope=self._work_scope,
             )
             if not security.allowed:
                 await self._observation(
@@ -332,27 +350,19 @@ class TicketAgentLoop:
 
     async def _bootstrap_reads(self) -> None:
         """Pre-load likely files (OpenHands-style scaffold for weak models)."""
+        scope = self._work_scope or build_work_scope(
+            self._story, self._ticket, self.tool_state.tree_paths
+        )
         paths = score_paths_by_keywords(
             self.tool_state.tree_paths,
             self.tool_state.ticket,
             self.tool_state.story,
             limit=8,
-            task_kind=self._task_kind,
+            work_scope=scope,
         )
-        text = f"{self._ticket.title} {self._ticket.description or ''}".lower()
-        if self._task_kind == "docs" and "readme" in text:
-            for candidate in ("README.md", "readme.md", "Readme.md"):
-                if candidate in self.tool_state.tree_paths:
-                    if candidate not in paths:
-                        paths.insert(0, candidate)
-                    break
-
-        if self._task_kind == "css":
-            paths = [
-                p
-                for p in paths
-                if is_path_in_scope(p, "css", self.tool_state.tree_paths)
-            ][:6]
+        for fp in scope.focus_paths:
+            if fp not in paths:
+                paths.insert(0, fp)
 
         for path in paths[:3]:
             resolved = resolve_paths([path], self.tool_state.tree_paths)
@@ -397,6 +407,7 @@ class TicketAgentLoop:
             self._story,
             self.tool_state.tree_paths,
             self.existing_by_path,
+            work_scope=self._work_scope,
         )
         if issues:
             issue_text = "\n".join(f"- {i}" for i in issues[:8])
@@ -461,7 +472,12 @@ Implement now. Return JSON with files array (full content per file)."""
                 }
             )
         issues = validate_staged_writes(
-            staged, self._ticket, self._story, self.tool_state.tree_paths, self.existing_by_path
+            staged,
+            self._ticket,
+            self._story,
+            self.tool_state.tree_paths,
+            self.existing_by_path,
+            work_scope=self._work_scope,
         )
         if issues:
             await self.agent.add_log(
@@ -471,24 +487,16 @@ Implement now. Return JSON with files array (full content per file)."""
         self.tool_state.staged_writes = staged
         return staged
 
-    def _parse_step(self, raw: str) -> tuple[str, dict, str]:
-        try:
-            data = extract_json(raw)
-        except ValueError:
-            return "", {}, ""
-
-        action = (
-            data.get("action")
-            or data.get("tool")
-            or data.get("name")
-            or ""
-        ).strip().lower().replace("-", "_")
-        action = ACTION_ALIASES.get(action, action)
-        args = data.get("args") or data.get("arguments") or data.get("parameters") or {}
-        if not isinstance(args, dict):
-            args = {}
-        thought = data.get("thought") or data.get("reasoning") or data.get("analysis") or ""
-        return action, args, str(thought)[:500]
+    def _normalize_step_args(self, action: str, args: dict) -> dict:
+        """Normalize paths and flatten common arg mistakes."""
+        out = dict(args)
+        if "path" in out and out["path"]:
+            out["path"] = normalize_repo_path(str(out["path"]), self.tool_state.tree_paths)
+        if action == "write_file" and out.get("content") is None and out.get("body"):
+            out["content"] = out.pop("body")
+        if action == "search_files" and not out.get("query") and out.get("q"):
+            out["query"] = out.pop("q")
+        return out
 
     def _phase_hint(self, step: int) -> str | None:
         if self.tool_state.staged_writes:

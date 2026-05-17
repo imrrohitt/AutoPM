@@ -1,12 +1,11 @@
 """Codebase context retrieval inspired by OpenHands (relevant files, not random samples)."""
 
 import re
-import uuid
 from dataclasses import dataclass
 
 from modules.agent.parsing import extract_json
 from modules.agent.quality import resolve_paths
-from modules.agent.task_scope import infer_task_kind
+from modules.agent.work_scope import WorkScope, build_work_scope
 from modules.github.git_client import GitHubClient
 from modules.llm.client import chat_completion
 from modules.stories.models import Story
@@ -29,7 +28,7 @@ Schema:
 
 Rules:
 - Pick paths that exist in the provided file tree only
-- Prefer files directly related to the ticket
+- Prefer files that match the STORY scope and acceptance criteria
 - Be brief — truncated JSON breaks the pipeline"""
 
 
@@ -45,10 +44,10 @@ def score_paths_by_keywords(
     story: Story,
     *,
     limit: int = 40,
-    task_kind: str | None = None,
+    work_scope: WorkScope | None = None,
 ) -> list[str]:
-    """Heuristic ranking before LLM selection (task-aware, OpenHands-style)."""
-    kind = task_kind or infer_task_kind(ticket, story)
+    """Rank paths using story/ticket keywords and optional work scope."""
+    scope = work_scope or build_work_scope(story, ticket, tree_paths)
     text = " ".join(
         [
             ticket.title,
@@ -58,48 +57,28 @@ def score_paths_by_keywords(
             story.acceptance_criteria or "",
         ]
     ).lower()
-    tokens = {t for t in re.split(r"[^a-z0-9]+", text) if len(t) > 2}
+    tokens = scope.focus_tokens or {t for t in re.split(r"[^a-z0-9]+", text) if len(t) > 2}
 
     scored: list[tuple[int, str]] = []
     for path in tree_paths:
         path_lower = path.lower()
-        score = sum(2 if t in path_lower else 0 for t in tokens)
-
-        if kind == "css":
-            if path_lower.endswith((".css", ".scss", ".sass", ".less")):
-                score += 8
-            if any(h in path_lower for h in ("style", "styles", "global", "homepage", "home", "theme", "app")):
-                score += 5
-            if path_lower.endswith((".js", ".ts", ".tsx", ".jsx", ".md")):
-                score -= 4
-        elif kind == "docs":
-            if any(doc in path_lower for doc in ("readme", "agent", "contribut", "docs/")):
-                score += 6
-            if path_lower.endswith(".md"):
-                score += 4
-        else:
-            if path_lower.endswith(CODE_EXTENSIONS):
-                score += 1
-            if any(doc in path_lower for doc in ("readme", "agent", "contribut")):
-                score += 1
-
+        score = sum(3 if t in path_lower else 0 for t in tokens)
+        if path in scope.focus_paths or path_lower in {p.lower() for p in scope.focus_paths}:
+            score += 12
+        if path_lower.endswith(CODE_EXTENSIONS):
+            score += 1
         if score > 0:
             scored.append((score, path))
 
     scored.sort(key=lambda x: (-x[0], x[1]))
     top = [p for _, p in scored[:limit]]
 
+    if not top and scope.focus_paths:
+        top = scope.focus_paths[:limit]
     if not top:
-        if kind == "css":
-            top = [
-                p
-                for p in tree_paths
-                if p.lower().endswith((".css", ".scss", ".sass", ".less"))
-            ][:limit]
-        elif kind == "docs":
-            top = [p for p in tree_paths if p.lower().endswith(".md")][:limit]
-        else:
-            top = [p for p in tree_paths if p.lower().endswith(CODE_EXTENSIONS)][:limit]
+        top = [p for p in tree_paths if any(t in p.lower() for t in tokens)][:limit]
+    if not top:
+        top = [p for p in tree_paths if p.lower().endswith(CODE_EXTENSIONS)][:limit]
     return top
 
 
@@ -169,15 +148,25 @@ async def explore_ticket_context(
     tree_paths: list[str],
     prior_work: str,
     codebase_summary: str,
+    project_intelligence: str = "",
+    work_scope: WorkScope | None = None,
 ) -> dict:
     """LLM selects relevant files and plans approach (OpenHands-style exploration step)."""
-    candidates = score_paths_by_keywords(tree_paths, ticket, story, limit=60)
+    scope = work_scope or build_work_scope(
+        story, ticket, tree_paths, project_intelligence=project_intelligence
+    )
+    candidates = score_paths_by_keywords(
+        tree_paths, ticket, story, limit=60, work_scope=scope
+    )
     tree_sample = "\n".join(tree_paths[:150])
     candidate_list = "\n".join(f"- {p}" for p in candidates[:50])
 
     user_prompt = f"""PROJECT: {project_name}
 GOALS: {project_goals or 'N/A'}
 TECH STACK: {tech_stack or 'N/A'}
+
+STORY SCOPE:
+{scope.hint[:2500]}
 
 STORY: {story.title}
 DESCRIPTION: {story.description or ''}
@@ -191,6 +180,9 @@ PRIOR WORK ON THIS STORY:
 
 CODEBASE INDEX:
 {codebase_summary[:3000]}
+
+PROJECT INTELLIGENCE (excerpt):
+{project_intelligence[:2000] if project_intelligence else 'N/A'}
 
 CANDIDATE PATHS (ranked by relevance):
 {candidate_list}
@@ -228,32 +220,19 @@ Select files to read and outline your implementation approach."""
         try:
             parsed = extract_json(raw)
         except ValueError:
-            fallback_paths = candidates[:8] or score_paths_by_keywords(
-                tree_paths, ticket, story, limit=8
-            )
+            fallback_paths = candidates[:8] or scope.focus_paths[:8]
             parsed = {
-                "reasoning": "Fallback: using keyword-matched paths (LLM response was truncated)",
+                "reasoning": "Fallback: story-scoped path ranking (LLM response was truncated)",
                 "relevant_paths": fallback_paths,
-                "approach": "1. Read relevant files 2. Apply ticket changes",
+                "approach": "1. Read relevant files 2. Apply story changes",
                 "dependencies": [],
                 "risks": [],
             }
     parsed["relevant_paths"] = resolve_paths(parsed.get("relevant_paths") or [], tree_paths)
-    kind = infer_task_kind(ticket, story)
-    if kind == "docs" or (
-        "readme" in (ticket.description or "").lower() or "readme" in ticket.title.lower()
-    ):
-        for candidate in ("README.md", "readme.md", "Readme.md"):
-            if candidate in tree_paths and candidate not in parsed["relevant_paths"]:
-                parsed["relevant_paths"].insert(0, candidate)
-                break
-    elif kind == "css":
-        css_first = score_paths_by_keywords(
-            tree_paths, ticket, story, limit=6, task_kind="css"
-        )
-        for p in reversed(css_first):
-            if p not in parsed["relevant_paths"]:
-                parsed["relevant_paths"].insert(0, p)
+    for fp in scope.focus_paths:
+        if fp not in parsed["relevant_paths"]:
+            parsed["relevant_paths"].insert(0, fp)
+    parsed["relevant_paths"] = list(dict.fromkeys(parsed["relevant_paths"]))[:12]
     return parsed
 
 

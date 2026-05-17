@@ -5,7 +5,15 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from core.config import get_settings
 from core.database import Base
+
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:  # pragma: no cover
+    Vector = None  # type: ignore[misc, assignment]
+
+_EMBED_DIM = get_settings().EMBEDDING_DIMENSION
 
 
 class AgentRun(Base):
@@ -108,3 +116,26 @@ class AgentRunFileChange(Base):
     )
 
     run: Mapped["AgentRun"] = relationship("AgentRun", back_populates="file_changes")
+
+
+class ProjectSemanticMemory(Base):
+    __tablename__ = "project_semantic_memory"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    story_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stories.id", ondelete="CASCADE"), nullable=True
+    )
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    memory_tier: Mapped[str] = mapped_column(String(32), nullable=False)
+    memory_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(_EMBED_DIM), nullable=False)  # type: ignore[arg-type]
+    meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.agent.models import AgentMemory, AgentRun
+from modules.agent.semantic_memory import SemanticMemoryStore
 
 
 class AgentMemoryStore:
@@ -137,3 +138,29 @@ async def load_prior_story_learnings(
             lines.append(f"Run {run.completed_at}:\n" + "\n".join(summary_parts))
 
     return "\n\n".join(lines)
+
+
+async def load_semantic_story_context(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    story: "Story",  # noqa: F821
+    *,
+    run_id: uuid.UUID | None = None,
+    limit: int = 8,
+) -> str:
+    """Recall project-level semantic memory (pgvector) for a story."""
+    from modules.stories.models import Story as StoryModel
+
+    if not isinstance(story, StoryModel):
+        raise TypeError("story must be a Story model instance")
+    query = "\n".join(
+        filter(
+            None,
+            [story.title, story.description or "", story.acceptance_criteria or ""],
+        )
+    )
+    store = SemanticMemoryStore(db, project_id)
+    hits = await store.recall(
+        query, limit=limit, story_id=story.id, run_id=run_id
+    )
+    return SemanticMemoryStore.format_hits(hits, header="Semantic memory")
