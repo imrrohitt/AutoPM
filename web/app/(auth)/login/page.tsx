@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Spinner } from "@/components/ui/spinner";
 import { authApi } from "@/lib/api";
 import { setTokens } from "@/lib/auth";
+import { BRAND } from "@/lib/brand";
 import { getErrorMessage } from "@/lib/utils";
 
 function LoginForm() {
@@ -39,8 +40,8 @@ function LoginForm() {
   return (
     <Card className="shadow-lg">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Sign in to AutoPM</CardTitle>
-        <CardDescription>AI-native project management</CardDescription>
+        <CardTitle className="text-2xl">Sign in to {BRAND.name}</CardTitle>
+        <CardDescription>{BRAND.tagline}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

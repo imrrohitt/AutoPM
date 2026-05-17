@@ -4,23 +4,28 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 224 71% 4%;
+    /* Logo palette: navy #154c79, teal #2da1a4, mint #76d7c4 */
+    --brand-navy: 205 70% 28%;
+    --brand-teal: 181 57% 41%;
+    --brand-mint: 168 55% 65%;
+
+    --background: 168 33% 98%;
+    --foreground: 205 70% 18%;
     --card: 0 0% 100%;
-    --card-foreground: 224 71% 4%;
-    --primary: 262 83% 58%;
+    --card-foreground: 205 70% 18%;
+    --primary: 181 57% 41%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 9% 46%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 220 14% 96%;
-    --accent-foreground: 224 71% 4%;
+    --secondary: 168 40% 94%;
+    --secondary-foreground: 205 55% 28%;
+    --muted: 168 25% 94%;
+    --muted-foreground: 205 20% 42%;
+    --accent: 168 55% 92%;
+    --accent-foreground: 205 70% 22%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 262 83% 58%;
+    --border: 168 22% 88%;
+    --input: 168 22% 88%;
+    --ring: 181 57% 41%;
     --radius: 0.625rem;
   }
 
@@ -37,5 +42,14 @@
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .brand-gradient {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--brand-mint) / 0.35) 0%,
+      hsl(var(--background)) 45%,
+      hsl(var(--brand-teal) / 0.12) 100%
+    );
   }
 }
