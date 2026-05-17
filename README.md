@@ -1,6 +1,16 @@
+<br />
+
 <p align="center">
-  <img src="docs/assets/logo-banner.png" alt="AutoPM — AI-native project management" width="640" />
+  <a href="https://github.com/imrrohitt/AutoPM">
+    <img
+      src="docs/assets/logo-banner-hero.png"
+      alt="AutoPM — AI-native project management"
+      width="1012"
+    />
+  </a>
 </p>
+
+<br />
 
 <p align="center">
   <strong>Multi-tenant project management with autonomous coding agents that read your repo, implement work, and open pull requests.</strong>
