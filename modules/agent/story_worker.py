@@ -15,6 +15,7 @@ from modules.agent.parsing import extract_json
 from modules.agent.planner import create_story_plan, order_tickets_by_plan, plan_to_memory_text
 from modules.agent.prompts import REVIEW_PROMPT
 from modules.agent.quality import validate_patch
+from modules.agent.task_scope import infer_task_kind, scope_hint_for_kind
 from modules.agent.service import AgentService, _slugify
 from modules.github.git_client import GitHubClient
 from modules.github.models import GitHubConnection
@@ -118,6 +119,10 @@ class StoryAgentWorker:
                 codebase_summary=codebase_summary,
                 prior_learnings=prior_learnings,
             )
+            task_kind = infer_task_kind(tickets[0], story)
+            constraints = list(plan.get("constraints") or [])
+            constraints.append(scope_hint_for_kind(task_kind))
+            plan["constraints"] = constraints
             await self.memory.set("execution_plan", plan_to_memory_text(plan))
             await self.agent.add_log(
                 self.run_id,
@@ -347,9 +352,20 @@ class StoryAgentWorker:
 
             pr_files = await git.get_pr_files(owner, repo, pr_number)
             patch_issues: list[str] = []
+            tree_paths = [
+                p.strip()
+                for p in (memory.get("codebase_tree") or "").splitlines()
+                if p.strip()
+            ]
             for pf in pr_files:
                 patch_issues.extend(
-                    validate_patch(pf["filename"], pf.get("patch"), ticket, story)
+                    validate_patch(
+                        pf["filename"],
+                        pf.get("patch"),
+                        ticket,
+                        story,
+                        tree_paths=tree_paths,
+                    )
                 )
             if patch_issues and attempt == 0:
                 await self.agent.add_log(

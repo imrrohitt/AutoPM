@@ -16,6 +16,7 @@ from modules.agent.memory import AgentMemoryStore
 from modules.agent.parsing import extract_json
 from modules.agent.prompts import IMPLEMENT_RETRY_PROMPT
 from modules.agent.quality import resolve_paths
+from modules.agent.task_scope import infer_task_kind, is_path_in_scope, scope_hint_for_kind
 from modules.agent.security import analyze_action, validate_staged_writes
 from modules.agent.service import AgentService
 from modules.agent.step_log import persist_event
@@ -101,6 +102,8 @@ class TicketAgentLoop:
     ) -> list[dict]:
         from modules.agent.planner import plan_to_memory_text
 
+        self._task_kind = infer_task_kind(self._ticket, self._story)
+
         self._ctx = build_story_context(
             self._project,
             self._story,
@@ -109,6 +112,7 @@ class TicketAgentLoop:
             execution_plan=execution_plan or plan_to_memory_text(self._plan),
             prior_learnings=prior_learnings,
             codebase_summary=codebase_summary,
+            task_kind=self._task_kind,
         )
 
         small_model_note = (
@@ -116,7 +120,10 @@ class TicketAgentLoop:
             "1) search_files or list_tree 2) read_file 3) write_file with FULL content "
             "4) finish. After a successful write_file you may call finish immediately."
         )
-        system_prompt = self._ctx.build_system_prompt(TOOL_INSTRUCTIONS) + small_model_note
+        scope_note = f"\n\n{scope_hint_for_kind(self._task_kind)}"
+        system_prompt = (
+            self._ctx.build_system_prompt(TOOL_INSTRUCTIONS) + scope_note + small_model_note
+        )
         system_event = AgentEvent(
             event_type="system", source="agent", content=system_prompt
         )
@@ -266,14 +273,22 @@ class TicketAgentLoop:
             self.tool_state.ticket,
             self.tool_state.story,
             limit=8,
+            task_kind=self._task_kind,
         )
         text = f"{self._ticket.title} {self._ticket.description or ''}".lower()
-        if "readme" in text:
+        if self._task_kind == "docs" and "readme" in text:
             for candidate in ("README.md", "readme.md", "Readme.md"):
                 if candidate in self.tool_state.tree_paths:
                     if candidate not in paths:
                         paths.insert(0, candidate)
                     break
+
+        if self._task_kind == "css":
+            paths = [
+                p
+                for p in paths
+                if is_path_in_scope(p, "css", self.tool_state.tree_paths)
+            ][:6]
 
         for path in paths[:3]:
             resolved = resolve_paths([path], self.tool_state.tree_paths)

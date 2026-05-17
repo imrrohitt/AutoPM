@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from modules.agent.parsing import extract_json
 from modules.agent.quality import resolve_paths
+from modules.agent.task_scope import infer_task_kind
 from modules.github.git_client import GitHubClient
 from modules.llm.client import chat_completion
 from modules.stories.models import Story
@@ -44,8 +45,10 @@ def score_paths_by_keywords(
     story: Story,
     *,
     limit: int = 40,
+    task_kind: str | None = None,
 ) -> list[str]:
-    """Heuristic ranking before LLM selection."""
+    """Heuristic ranking before LLM selection (task-aware, OpenHands-style)."""
+    kind = task_kind or infer_task_kind(ticket, story)
     text = " ".join(
         [
             ticket.title,
@@ -61,17 +64,42 @@ def score_paths_by_keywords(
     for path in tree_paths:
         path_lower = path.lower()
         score = sum(2 if t in path_lower else 0 for t in tokens)
-        if path_lower.endswith(CODE_EXTENSIONS):
-            score += 1
-        if any(doc.lower() in path_lower for doc in ("readme", "agent", "contribut")):
-            score += 3
+
+        if kind == "css":
+            if path_lower.endswith((".css", ".scss", ".sass", ".less")):
+                score += 8
+            if any(h in path_lower for h in ("style", "styles", "global", "homepage", "home", "theme", "app")):
+                score += 5
+            if path_lower.endswith((".js", ".ts", ".tsx", ".jsx", ".md")):
+                score -= 4
+        elif kind == "docs":
+            if any(doc in path_lower for doc in ("readme", "agent", "contribut", "docs/")):
+                score += 6
+            if path_lower.endswith(".md"):
+                score += 4
+        else:
+            if path_lower.endswith(CODE_EXTENSIONS):
+                score += 1
+            if any(doc in path_lower for doc in ("readme", "agent", "contribut")):
+                score += 1
+
         if score > 0:
             scored.append((score, path))
 
     scored.sort(key=lambda x: (-x[0], x[1]))
     top = [p for _, p in scored[:limit]]
+
     if not top:
-        top = [p for p in tree_paths if p.lower().endswith(CODE_EXTENSIONS)][:limit]
+        if kind == "css":
+            top = [
+                p
+                for p in tree_paths
+                if p.lower().endswith((".css", ".scss", ".sass", ".less"))
+            ][:limit]
+        elif kind == "docs":
+            top = [p for p in tree_paths if p.lower().endswith(".md")][:limit]
+        else:
+            top = [p for p in tree_paths if p.lower().endswith(CODE_EXTENSIONS)][:limit]
     return top
 
 
@@ -211,11 +239,21 @@ Select files to read and outline your implementation approach."""
                 "risks": [],
             }
     parsed["relevant_paths"] = resolve_paths(parsed.get("relevant_paths") or [], tree_paths)
-    if "readme" in (ticket.description or "").lower() or "readme" in ticket.title.lower():
+    kind = infer_task_kind(ticket, story)
+    if kind == "docs" or (
+        "readme" in (ticket.description or "").lower() or "readme" in ticket.title.lower()
+    ):
         for candidate in ("README.md", "readme.md", "Readme.md"):
             if candidate in tree_paths and candidate not in parsed["relevant_paths"]:
                 parsed["relevant_paths"].insert(0, candidate)
                 break
+    elif kind == "css":
+        css_first = score_paths_by_keywords(
+            tree_paths, ticket, story, limit=6, task_kind="css"
+        )
+        for p in reversed(css_first):
+            if p not in parsed["relevant_paths"]:
+                parsed["relevant_paths"].insert(0, p)
     return parsed
 
 

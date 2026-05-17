@@ -35,6 +35,7 @@ Rules:
 - Always read_file before write_file on existing paths
 - Use exact paths from list_tree/search_files
 - write_file content must be complete final file, not a description of changes
+- Match file type to task: CSS tasks → .css/.scss only; never paste README markdown into .js files
 - Call finish when done; do not stop after only planning"""
 
 

@@ -3,6 +3,12 @@
 import re
 from difflib import SequenceMatcher
 
+from modules.agent.task_scope import (
+    infer_task_kind,
+    is_path_in_scope,
+    looks_like_code_in_doc_file,
+    looks_like_markdown_in_code_file,
+)
 from modules.stories.models import Story
 from modules.tickets.models import Ticket
 
@@ -125,14 +131,33 @@ def validate_file_change(
     tree_paths: list[str],
     *,
     existing_content: str | None = None,
+    task_kind: str | None = None,
 ) -> list[str]:
     """Return human-readable quality issues; empty list means OK."""
     issues: list[str] = []
     tree_set = set(tree_paths)
+    kind = task_kind or infer_task_kind(ticket, story)
+
+    if tree_paths and not is_path_in_scope(path, kind, tree_paths):
+        issues.append(
+            f"{path}: out of scope for a {kind} task — "
+            f"only change files that match the ticket (e.g. stylesheets for CSS work)"
+        )
 
     if is_echo_content(content, ticket, story):
         issues.append(
             f"{path}: content looks like a copy of the task description, not real implementation"
+        )
+
+    if looks_like_markdown_in_code_file(path, content):
+        issues.append(
+            f"{path}: content looks like markdown/README text in a code file — "
+            "edit the correct file type with valid source code or CSS only"
+        )
+
+    if looks_like_code_in_doc_file(path, content):
+        issues.append(
+            f"{path}: documentation file contains raw code instead of markdown prose"
         )
 
     basename = path.split("/")[-1].lower()
@@ -144,6 +169,18 @@ def validate_file_change(
     elif any(path.endswith(ext) for ext in (".py", ".ts", ".tsx", ".js", ".jsx")):
         if len(content.strip()) < MIN_CODE_CHARS:
             issues.append(f"{path}: code file too short to be a real implementation")
+        if not re.search(r"[;{}()=]|^\s*(import|export|const|function|class)\s", content, re.MULTILINE):
+            issues.append(
+                f"{path}: does not look like valid JS/TS/Python — "
+                "preserve imports and structure from the file you read"
+            )
+    elif path.lower().endswith((".css", ".scss", ".sass", ".less")):
+        if len(content.strip()) < 20:
+            issues.append(f"{path}: stylesheet too short")
+        if not re.search(r"[{}:;]|@media|@import", content):
+            issues.append(
+                f"{path}: does not look like CSS — use selectors, properties, and values"
+            )
     elif len(content.strip()) < MIN_GENERIC_DOC_CHARS:
         issues.append(f"{path}: file content too short")
 
@@ -158,6 +195,8 @@ def validate_patch(
     patch: str | None,
     ticket: Ticket,
     story: Story,
+    *,
+    tree_paths: list[str] | None = None,
 ) -> list[str]:
     """Validate PR patch content before merge."""
     if not patch:
@@ -170,7 +209,13 @@ def validate_patch(
     if not added_lines:
         return [f"{filename}: no added content in patch"]
     content = "\n".join(added_lines)
-    return validate_file_change(filename, content, ticket, story, tree_paths=[])
+    return validate_file_change(
+        filename,
+        content,
+        ticket,
+        story,
+        tree_paths=tree_paths or [],
+    )
 
 
 def validate_change_set(

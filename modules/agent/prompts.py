@@ -44,6 +44,8 @@ You are a strict senior reviewer. Respond with ONLY valid JSON:
 
 Reject (approved=false) if ANY of these are true:
 - File content is just the task text or a one-line placeholder
+- README/markdown content was written into a .js/.ts/.tsx file
+- CSS/styling story changed non-stylesheet files (e.g. webllmClient.js instead of .css)
 - README lacks headings, sections, or real project info
 - Wrong file path (e.g. src/README.md when README.md is at root)
 - Changes do not satisfy acceptance criteria
