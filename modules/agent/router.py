@@ -17,7 +17,11 @@ from modules.agent.schemas import (
     AgentRunDetailResponse,
     AgentRunResponse,
     AgentWorkspaceResponse,
+    StoryAgentScheduleCreate,
+    StoryAgentScheduleResponse,
+    StoryAgentScheduleUpdate,
 )
+from modules.agent.schedule_service import StoryAgentScheduleService
 from modules.agent.service import AgentService
 from modules.agent.workspace import RunWorkspaceService
 from modules.users.models import User
@@ -42,6 +46,68 @@ async def list_story_agent_runs(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     return await AgentService(db).list_runs_for_story(current_user, story_id)
+
+
+@router.get(
+    "/stories/{story_id}/agent/schedules",
+    response_model=list[StoryAgentScheduleResponse],
+)
+async def list_story_agent_schedules(
+    story_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await StoryAgentScheduleService(db).list_for_story(current_user, story_id)
+
+
+@router.post(
+    "/stories/{story_id}/agent/schedules",
+    response_model=StoryAgentScheduleResponse,
+)
+async def create_story_agent_schedule(
+    story_id: UUID,
+    project_id: Annotated[UUID, Query(description="Project ID for the story")],
+    body: StoryAgentScheduleCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await StoryAgentScheduleService(db).create(
+        current_user, project_id, story_id, body
+    )
+
+
+@router.patch(
+    "/agent/schedules/{schedule_id}",
+    response_model=StoryAgentScheduleResponse,
+)
+async def update_story_agent_schedule(
+    schedule_id: UUID,
+    body: StoryAgentScheduleUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await StoryAgentScheduleService(db).update(current_user, schedule_id, body)
+
+
+@router.delete("/agent/schedules/{schedule_id}", status_code=204)
+async def delete_story_agent_schedule(
+    schedule_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    await StoryAgentScheduleService(db).delete(current_user, schedule_id)
+
+
+@router.get(
+    "/agent/schedules/{schedule_id}/history",
+    response_model=list[AgentRunResponse],
+)
+async def list_story_agent_schedule_history(
+    schedule_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await StoryAgentScheduleService(db).list_history(current_user, schedule_id)
 
 
 @router.post("/tickets/{ticket_id}/agent/run", response_model=AgentRunResponse)

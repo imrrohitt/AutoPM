@@ -6,6 +6,7 @@ from modules.agent.models import (  # noqa: F401
     AgentRun,
     AgentRunFileChange,
     ProjectSemanticMemory,
+    StoryAgentSchedule,
 )
 from modules.companies.models import Company  # noqa: F401
 from modules.github.models import GitHubConnection  # noqa: F401

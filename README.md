@@ -198,8 +198,8 @@ alembic upgrade head
 python seed.py                    # optional: admin@autopm.com / changeme123
 ./scripts/dev-backend.sh          # → http://localhost:8000
 
-# 4 — Celery (required for agents)
-./scripts/dev-celery.sh
+# 4 — Celery (required for agents + scheduled story AI runs)
+./scripts/dev-celery.sh          # workers + beat in one process group
 
 # 5 — Frontend
 cd web && npm install && npm run dev   # → http://localhost:3000
@@ -241,7 +241,7 @@ Add **`AGENTS.md`** to target repos so the agent follows your conventions.
 |---------|-------------|
 | `./scripts/dev-backend.sh` | FastAPI with hot reload (`:8000`) |
 | `./scripts/dev-frontend.sh` | Next.js dev server (`:3000`) |
-| `./scripts/dev-celery.sh` | Celery: `agent` queue (prefork) + `default` queue (gevent greenlets) |
+| `./scripts/dev-celery.sh` | Celery workers (`agent` prefork + `default` gevent) + beat (schedules) |
 | `alembic upgrade head` | Apply database migrations |
 
 ---

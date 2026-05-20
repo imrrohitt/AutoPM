@@ -130,12 +130,33 @@ export interface LLMProviderInfo {
   requires_base_url: boolean;
 }
 
+export interface StoryAgentSchedule {
+  id: string;
+  story_id: string;
+  project_id: string;
+  created_by?: string | null;
+  label?: string | null;
+  schedule_type: "once" | "daily" | "weekly";
+  run_at: string;
+  weekdays?: number[] | null;
+  timezone: string;
+  enabled: boolean;
+  next_run_at: string;
+  last_triggered_at?: string | null;
+  last_run_id?: string | null;
+  last_run_status?: string | null;
+  run_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AgentRun {
   id: string;
   ticket_id?: string | null;
   story_id?: string | null;
   project_id: string;
   run_type?: string;
+  schedule_id?: string | null;
   current_ticket_id?: string | null;
   status: string;
   branch_name?: string | null;

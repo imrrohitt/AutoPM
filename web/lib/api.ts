@@ -234,6 +234,45 @@ export const agentApi = {
     }),
   listStoryRuns: (storyId: string) =>
     api.get<AgentRun[]>(`/stories/${storyId}/agent/runs`),
+  listStorySchedules: (storyId: string) =>
+    api.get<import("@/lib/types").StoryAgentSchedule[]>(
+      `/stories/${storyId}/agent/schedules`
+    ),
+  createStorySchedule: (
+    storyId: string,
+    projectId: string,
+    body: {
+      label?: string;
+      schedule_type: "once" | "daily" | "weekly";
+      run_at: string;
+      weekdays?: number[];
+      timezone?: string;
+    }
+  ) =>
+    api.post<import("@/lib/types").StoryAgentSchedule>(
+      `/stories/${storyId}/agent/schedules`,
+      body,
+      { params: { project_id: projectId } }
+    ),
+  updateStorySchedule: (
+    scheduleId: string,
+    body: Partial<{
+      label: string;
+      schedule_type: "once" | "daily" | "weekly";
+      run_at: string;
+      weekdays: number[];
+      timezone: string;
+      enabled: boolean;
+    }>
+  ) =>
+    api.patch<import("@/lib/types").StoryAgentSchedule>(
+      `/agent/schedules/${scheduleId}`,
+      body
+    ),
+  deleteStorySchedule: (scheduleId: string) =>
+    api.delete(`/agent/schedules/${scheduleId}`),
+  getStoryScheduleHistory: (scheduleId: string) =>
+    api.get<AgentRun[]>(`/agent/schedules/${scheduleId}/history`),
   run: (ticketId: string) =>
     api.post<AgentRun>(`/tickets/${ticketId}/agent/run`),
   cancel: (runId: string) => api.post(`/agent/runs/${runId}/cancel`),

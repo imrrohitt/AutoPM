@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Bot, ExternalLink, Square } from "lucide-react";
 import { toast } from "sonner";
 import { AgentActivityFeed } from "@/components/agent/AgentActivityFeed";
+import { StoryAgentSchedulePanel } from "@/components/agent/StoryAgentSchedulePanel";
 import { AgentCodePanel } from "@/components/agent/AgentCodePanel";
 import { AgentStatusBadge } from "@/components/agent/AgentStatusBadge";
 import { BackLink } from "@/components/ui/back-link";
@@ -170,6 +171,12 @@ export default function StoryAgentWorkspacePage() {
         )}
       </header>
 
+      <StoryAgentSchedulePanel
+        storyId={storyId}
+        projectId={projectId}
+        onScheduledRun={refreshRuns}
+      />
+
       <Card className="shrink-0">
         <CardHeader className="py-3">
           <CardTitle className="text-sm">Run history</CardTitle>
@@ -194,6 +201,9 @@ export default function StoryAgentWorkspacePage() {
                       <AgentStatusBadge status={run.status} />
                       <p className="mt-1 font-mono text-muted-foreground">
                         {new Date(run.created_at).toLocaleString()}
+                        {run.schedule_id && (
+                          <span className="ml-1 text-primary">scheduled</span>
+                        )}
                       </p>
                     </button>
                   </li>

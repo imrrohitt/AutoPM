@@ -49,6 +49,14 @@ celery_app.conf.update(
     ),
     task_routes={
         "run_agent_task": {"queue": "agent"},
+        "check_story_agent_schedules": {"queue": "default"},
+    },
+    beat_schedule={
+        "check-story-agent-schedules": {
+            "task": "check_story_agent_schedules",
+            "schedule": 60.0,
+            "options": {"queue": "default"},
+        },
     },
     broker_connection_retry_on_startup=True,
 )
@@ -64,4 +72,5 @@ def _on_worker_init(**kwargs: object) -> None:
     engine.sync_engine.dispose(close=False)
 
 
+import modules.agent.schedule_tasks  # noqa: E402, F401
 import modules.agent.tasks  # noqa: E402, F401

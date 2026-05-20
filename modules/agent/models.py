@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,6 +40,12 @@ class AgentRun(Base):
     conversation_memory: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     current_ticket_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="SET NULL"), nullable=True
+    )
+    schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("story_agent_schedules.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -116,6 +122,38 @@ class AgentRunFileChange(Base):
     )
 
     run: Mapped["AgentRun"] = relationship("AgentRun", back_populates="file_changes")
+
+
+class StoryAgentSchedule(Base):
+    __tablename__ = "story_agent_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    story_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stories.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    schedule_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    weekdays: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
 
 class ProjectSemanticMemory(Base):

@@ -94,9 +94,33 @@ INSTRUCTIONS:
         story = await self._get_story(story_id)
         if story.project_id != project_id:
             raise NotFoundError("Story not found")
-
         await self._ensure_story_access(user, project_id)
+        run = await self._queue_story_run(project_id, story_id, schedule_id=None)
+        return AgentRunResponse.model_validate(run)
 
+    async def queue_story_run_scheduled(
+        self,
+        project_id: uuid.UUID,
+        story_id: uuid.UUID,
+        *,
+        schedule_id: uuid.UUID,
+    ) -> AgentRun:
+        """Queue a story agent run from Celery beat (no user context)."""
+        story = await self._get_story(story_id)
+        if story.project_id != project_id:
+            raise NotFoundError("Story not found")
+        return await self._queue_story_run(
+            project_id, story_id, schedule_id=schedule_id, from_schedule=True
+        )
+
+    async def _queue_story_run(
+        self,
+        project_id: uuid.UUID,
+        story_id: uuid.UUID,
+        *,
+        schedule_id: uuid.UUID | None,
+        from_schedule: bool = False,
+    ) -> AgentRun:
         active = await self.db.execute(
             select(AgentRun).where(
                 AgentRun.story_id == story_id,
@@ -105,11 +129,13 @@ INSTRUCTIONS:
         )
         existing = active.scalar_one_or_none()
         if existing:
+            if from_schedule:
+                raise ConflictError("An agent run is already active for this story")
             if existing.status == "running":
                 raise ConflictError("An agent run is already active for this story")
             redispatched = await self._redispatch_stale_queued(existing)
             if redispatched:
-                return redispatched
+                return existing
             raise ConflictError("An agent run is already active for this story")
 
         github_token = await GitHubService(self.db).get_decrypted_token(project_id)
@@ -127,6 +153,7 @@ INSTRUCTIONS:
             project_id=project_id,
             run_type="story",
             status="queued",
+            schedule_id=schedule_id,
         )
         self.db.add(run)
         await self.db.commit()
@@ -135,7 +162,7 @@ INSTRUCTIONS:
         from modules.agent.tasks import dispatch_agent_run
 
         dispatch_agent_run(run.id)
-        return AgentRunResponse.model_validate(run)
+        return run
 
     async def list_runs_for_story(self, user: User, story_id: uuid.UUID) -> list[AgentRunResponse]:
         await self._ensure_story_access_by_story(user, story_id)
