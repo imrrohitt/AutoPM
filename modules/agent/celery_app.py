@@ -49,13 +49,14 @@ celery_app.conf.update(
     ),
     task_routes={
         "run_agent_task": {"queue": "agent"},
-        "check_story_agent_schedules": {"queue": "default"},
+        # Prefork only — asyncio + asyncpg (gevent subprocess causes LoopExit on Linux).
+        "check_story_agent_schedules": {"queue": "agent"},
     },
     beat_schedule={
         "check-story-agent-schedules": {
             "task": "check_story_agent_schedules",
             "schedule": 60.0,
-            "options": {"queue": "default"},
+            "options": {"queue": "agent"},
         },
     },
     broker_connection_retry_on_startup=True,

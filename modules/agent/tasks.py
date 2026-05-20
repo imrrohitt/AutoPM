@@ -69,14 +69,18 @@ def run_python_module_subprocess(module: str, *args: str) -> int:
     cwd = str(_REPO_ROOT)
 
     if _gevent_worker():
-        import gevent.subprocess as gsubprocess
+        # Run blocking subprocess in a real OS thread (avoids gevent LoopExit on poll/wait).
+        from gevent.threadpool import ThreadPool
 
-        proc = gsubprocess.Popen(cmd, cwd=cwd, env=env)
-        while proc.poll() is None:
-            import gevent
-
-            gevent.sleep(0.25)
-        return proc.returncode if proc.returncode is not None else 0
+        pool = ThreadPool(1)
+        result = pool.spawn(
+            subprocess.run,
+            cmd,
+            cwd=cwd,
+            env=env,
+            check=False,
+        ).get()
+        return result.returncode
 
     return subprocess.run(cmd, cwd=cwd, env=env).returncode
 
