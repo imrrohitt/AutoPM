@@ -56,30 +56,35 @@ async def _mark_run_failed(run_id: uuid.UUID, error: str) -> None:
         await db.commit()
 
 
-def _run_in_subprocess(run_id: uuid.UUID, *extra_cli_args: str) -> None:
+def run_python_module_subprocess(module: str, *args: str) -> int:
     """
-    Spawn a clean Python process for asyncio + asyncpg.
+    Spawn a clean Python process (asyncio + asyncpg safe).
 
     Under gevent, use gevent.subprocess so wait() yields to the hub (stdlib
     subprocess.run() blocks the worker and triggers LoopExit in Celery's pool).
     """
-    cmd = [sys.executable, "-m", "modules.agent.run_cli", str(run_id), *extra_cli_args]
-    logger.info("spawning agent subprocess: %s", " ".join(cmd))
+    cmd = [sys.executable, "-m", module, *args]
+    logger.info("spawning subprocess: %s", " ".join(cmd))
     env = os.environ.copy()
     cwd = str(_REPO_ROOT)
 
     if _gevent_worker():
-        import gevent
         import gevent.subprocess as gsubprocess
 
         proc = gsubprocess.Popen(cmd, cwd=cwd, env=env)
-        # poll + sleep — proc.wait() can still upset gevent's thread resolver on macOS
         while proc.poll() is None:
-            gevent.sleep(0.25)
-        returncode = proc.returncode if proc.returncode is not None else 0
-    else:
-        returncode = subprocess.run(cmd, cwd=cwd, env=env).returncode
+            import gevent
 
+            gevent.sleep(0.25)
+        return proc.returncode if proc.returncode is not None else 0
+
+    return subprocess.run(cmd, cwd=cwd, env=env).returncode
+
+
+def _run_in_subprocess(run_id: uuid.UUID, *extra_cli_args: str) -> None:
+    returncode = run_python_module_subprocess(
+        "modules.agent.run_cli", str(run_id), *extra_cli_args
+    )
     logger.info("agent subprocess finished run_id=%s exit=%s", run_id, returncode)
     if returncode != 0:
         raise RuntimeError(f"Agent subprocess exited with code {returncode}")
